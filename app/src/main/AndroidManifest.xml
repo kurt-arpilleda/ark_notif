@@ -43,7 +43,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" /> <!-- For some devices -->
-                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" /> <!-- HTC devices -->
             </intent-filter>
         </receiver>
         <service

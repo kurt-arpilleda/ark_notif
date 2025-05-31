@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,12 +34,14 @@ class RingMonitoringService : Service() {
     @SuppressLint("ForegroundServiceType")
     override fun onCreate() {
         super.onCreate()
+        Log.d("RingMonitoringService", "Service created")
         createNotificationChannel()
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         startForeground(NOTIFICATION_ID, createNotification())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d("RingMonitoringService", "Service started")
         startMonitoring()
         return START_STICKY
     }
@@ -52,14 +55,16 @@ class RingMonitoringService : Service() {
                     if (response.isSuccessful) {
                         response.body()?.isRing?.let { ringStatus ->
                             if (ringStatus == 1 && !isRinging) {
+                                Log.d("RingMonitoringService", "Starting ring")
                                 startRinging()
                             } else if (ringStatus == 0 && isRinging) {
+                                Log.d("RingMonitoringService", "Stopping ring")
                                 stopRinging()
                             }
                         }
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e("RingMonitoringService", "Monitoring error", e)
                 }
                 delay(2000) // Check every 2 seconds
             }
@@ -120,7 +125,9 @@ class RingMonitoringService : Service() {
                 CHANNEL_ID,
                 "Ring Monitoring Service",
                 NotificationManager.IMPORTANCE_LOW
-            )
+            ).apply {
+                description = "Notification channel for ring monitoring service"
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
         }
@@ -132,11 +139,13 @@ class RingMonitoringService : Service() {
             .setContentText("Monitoring for ring requests")
             .setSmallIcon(R.drawable.ic_ring_active)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
             .build()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        Log.d("RingMonitoringService", "Service destroyed")
         monitoringJob?.cancel()
         stopRinging()
     }
@@ -146,6 +155,7 @@ class RingMonitoringService : Service() {
         private const val NOTIFICATION_ID = 1234
 
         fun startService(context: Context) {
+            Log.d("RingMonitoringService", "Attempting to start service")
             val intent = Intent(context, RingMonitoringService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)

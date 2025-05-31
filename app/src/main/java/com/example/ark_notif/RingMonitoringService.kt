@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class RingMonitoringService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO)
@@ -28,6 +29,32 @@ class RingMonitoringService : Service() {
     private var ringtone: android.media.Ringtone? = null
     private var vibrator: Vibrator? = null
     private var isRinging = false
+    private var isMonitoring = false
+
+    companion object {
+        private const val CHANNEL_ID = "RingMonitoringChannel"
+        private const val NOTIFICATION_ID = 1234
+        private const val MONITORING_INTERVAL = 2000L // 2 seconds
+
+        fun startService(context: Context) {
+            val intent = Intent(context, RingMonitoringService::class.java).apply {
+                action = "START_MONITORING"
+                putExtra("timestamp", System.currentTimeMillis())
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun stopService(context: Context) {
+            val intent = Intent(context, RingMonitoringService::class.java).apply {
+                action = "STOP_MONITORING"
+            }
+            context.stopService(intent)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -41,17 +68,43 @@ class RingMonitoringService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("RingMonitoringService", "Service started")
-        startMonitoring()
+        when (intent?.action) {
+            "START_MONITORING" -> {
+                Log.d("RingMonitoringService", "Received start command")
+                if (!isMonitoring) {
+                    startMonitoring()
+                } else {
+                    Log.d("RingMonitoringService", "Service already monitoring, ignoring duplicate start")
+                }
+            }
+            "STOP_MONITORING" -> {
+                Log.d("RingMonitoringService", "Received stop command")
+                stopMonitoring()
+                stopSelf()
+            }
+            else -> {
+                // Default behavior if no action specified
+                if (!isMonitoring) {
+                    startMonitoring()
+                }
+            }
+        }
         return START_STICKY
     }
 
     private fun startMonitoring() {
-        monitoringJob?.cancel()
+        if (isMonitoring) return
+
+        isMonitoring = true
+        monitoringJob?.cancel() // Cancel any existing job
+
         monitoringJob = serviceScope.launch {
-            while (true) {
+            while (isMonitoring) {
                 try {
-                    val response = RetrofitClient.instance.getRingStatus().execute()
+                    val response = withContext(Dispatchers.IO) {
+                        RetrofitClient.instance.getRingStatus().execute()
+                    }
+
                     if (response.isSuccessful) {
                         response.body()?.isRing?.let { ringStatus ->
                             if (ringStatus == 1 && !isRinging) {
@@ -65,60 +118,69 @@ class RingMonitoringService : Service() {
                     }
                 } catch (e: Exception) {
                     Log.e("RingMonitoringService", "Monitoring error", e)
+                    // Add delay before retry to prevent tight loop on error
+                    delay(5000)
                 }
-                delay(2000) // Check every 2 seconds
+                delay(MONITORING_INTERVAL)
             }
         }
     }
 
+    private fun stopMonitoring() {
+        isMonitoring = false
+        monitoringJob?.cancel()
+        monitoringJob = null
+        stopRinging()
+    }
+
     private fun startRinging() {
-        if (!isRinging) {
-            isRinging = true
-            val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        if (isRinging) return
 
-            // Configure audio attributes
-            val audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
+        isRinging = true
+        val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
 
-            // Start a coroutine to continuously play the ringtone
-            serviceScope.launch {
-                while (isRinging) {
-                    val currentRingtone = RingtoneManager.getRingtone(this@RingMonitoringService, alarmUri).apply {
-                        setAudioAttributes(audioAttributes)
-                        play()
-                    }
-
-                    // Wait for the ringtone to finish playing or until we should stop
-                    while (currentRingtone.isPlaying && isRinging) {
-                        delay(100)
-                    }
-
-                    currentRingtone.stop()
+        serviceScope.launch {
+            while (isRinging) {
+                val currentRingtone = RingtoneManager.getRingtone(
+                    this@RingMonitoringService,
+                    alarmUri
+                ).apply {
+                    setAudioAttributes(audioAttributes)
+                    play()
                 }
-            }
 
-            // Start vibration pattern
-            val pattern = longArrayOf(0, 1000, 1000) // wait 0, vibrate 1000, sleep 1000
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator?.vibrate(pattern, 0)
+                while (currentRingtone.isPlaying && isRinging) {
+                    delay(100)
+                }
+
+                // Proper cleanup of the Ringtone
+                currentRingtone.stop()
+                // No release() method exists - just let it be garbage collected
             }
+        }
+
+        // Start vibration pattern
+        val pattern = longArrayOf(0, 1000, 1000)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator?.vibrate(pattern, 0)
         }
     }
 
     private fun stopRinging() {
-        if (isRinging) {
-            isRinging = false
-            ringtone?.stop()
-            ringtone = null
-            vibrator?.cancel()
-        }
-    }
+        if (!isRinging) return
 
+        isRinging = false
+        ringtone?.stop()
+        ringtone = null
+        vibrator?.cancel()
+    }
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
@@ -144,29 +206,8 @@ class RingMonitoringService : Service() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         Log.d("RingMonitoringService", "Service destroyed")
-        monitoringJob?.cancel()
-        stopRinging()
-    }
-
-    companion object {
-        private const val CHANNEL_ID = "RingMonitoringChannel"
-        private const val NOTIFICATION_ID = 1234
-
-        fun startService(context: Context) {
-            Log.d("RingMonitoringService", "Attempting to start service")
-            val intent = Intent(context, RingMonitoringService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
-        }
-
-        fun stopService(context: Context) {
-            val intent = Intent(context, RingMonitoringService::class.java)
-            context.stopService(intent)
-        }
+        stopMonitoring()
+        super.onDestroy()
     }
 }

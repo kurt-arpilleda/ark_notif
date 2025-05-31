@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
     private fun requestOverlayPermission() {
         val intent = Intent(
             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,

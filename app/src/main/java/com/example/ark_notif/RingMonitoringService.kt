@@ -7,11 +7,13 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
@@ -35,7 +37,7 @@ class RingMonitoringService : Service() {
         private const val CHANNEL_ID = "RingMonitoringChannel"
         private const val NOTIFICATION_ID = 1234
         private const val MONITORING_INTERVAL = 2000L // 2 seconds
-
+        private var wakeLock: PowerManager.WakeLock? = null
         fun startService(context: Context) {
             val intent = Intent(context, RingMonitoringService::class.java).apply {
                 action = "START_MONITORING"
@@ -58,13 +60,28 @@ class RingMonitoringService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    @SuppressLint("ForegroundServiceType")
+    @SuppressLint("ForegroundServiceType", "ServiceCast")
     override fun onCreate() {
         super.onCreate()
         Log.d("RingMonitoringService", "Service created")
         createNotificationChannel()
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        startForeground(NOTIFICATION_ID, createNotification())
+
+        // For Android 14+ compatibility
+        val notification = createNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "RingMonitoringService::lock"
+        ).apply {
+            acquire(10*60*1000L /*10 minutes*/)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -96,13 +113,20 @@ class RingMonitoringService : Service() {
         if (isMonitoring) return
 
         isMonitoring = true
-        monitoringJob?.cancel() // Cancel any existing job
+        monitoringJob?.cancel()
 
         monitoringJob = serviceScope.launch {
             while (isMonitoring) {
                 try {
-                    val response = withContext(Dispatchers.IO) {
-                        RetrofitClient.instance.getRingStatus().execute()
+                    // Use try-with-resources for the response
+                    val response = try {
+                        withContext(Dispatchers.IO) {
+                            RetrofitClient.instance.getRingStatus().execute()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("RingMonitoringService", "Network error", e)
+                        delay(5000) // Wait longer on error
+                        continue
                     }
 
                     if (response.isSuccessful) {
@@ -118,9 +142,9 @@ class RingMonitoringService : Service() {
                     }
                 } catch (e: Exception) {
                     Log.e("RingMonitoringService", "Monitoring error", e)
-                    // Add delay before retry to prevent tight loop on error
-                    delay(5000)
                 }
+
+                // Use exponential backoff for retries
                 delay(MONITORING_INTERVAL)
             }
         }
@@ -206,8 +230,12 @@ class RingMonitoringService : Service() {
     }
 
     override fun onDestroy() {
-        Log.d("RingMonitoringService", "Service destroyed")
-        stopMonitoring()
+        wakeLock?.let {
+            if (it.isHeld) {
+                it.release()
+            }
+        }
+        wakeLock = null
         super.onDestroy()
     }
 }

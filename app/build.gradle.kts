@@ -65,4 +65,6 @@ dependencies {
     implementation ("androidx.work:work-runtime-ktx:2.10.1")
     implementation ("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation ("androidx.lifecycle:lifecycle-service:2.9.0")
+    implementation ("androidx.media:media:1.7.0")
+    implementation ("androidx.work:work-multiprocess:2.10.1")
 }

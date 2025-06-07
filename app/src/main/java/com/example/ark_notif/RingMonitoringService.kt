@@ -280,7 +280,6 @@ class RingMonitoringService : Service() {
 
         ringtoneJob = serviceScope.launch {
             try {
-
                 stopSilentAudio()
                 val pattern = longArrayOf(0, 1000, 1000)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -308,8 +307,13 @@ class RingMonitoringService : Service() {
 
                         currentRingtone?.play()
 
-                        while (isActive && isRinging && currentRingtone?.isPlaying == true) {
-                            delay(500)
+                        try {
+                            while (isActive && isRinging && currentRingtone?.isPlaying == true) {
+                                delay(500)
+                            }
+                        } catch (e: CancellationException) {
+                            currentRingtone?.stop()
+                            throw e
                         }
 
                         currentRingtone?.stop()
@@ -320,11 +324,19 @@ class RingMonitoringService : Service() {
                         }
 
                     } catch (e: Exception) {
-                        Log.e("RingMonitoringService", "Error in ringtone loop", e)
-                        delay(1000)
+                        if (e !is CancellationException) {
+                            Log.e("RingMonitoringService", "Error in ringtone loop", e)
+                            delay(1000)
+                        }
                     }
                 }
             } catch (e: CancellationException) {
+                // Clean up on cancellation
+                currentRingtone?.stop()
+                vibrator?.cancel()
+                currentRingtone = null
+                startSilentAudio()
+                throw e
             } catch (e: Exception) {
                 Log.e("RingMonitoringService", "Ringtone error", e)
             } finally {

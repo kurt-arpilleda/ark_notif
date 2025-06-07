@@ -50,8 +50,6 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !Settings.canDrawOverlays(this)) {
             requestOverlayPermission()
         }
-
-        checkBatteryOptimization()
         checkAndRequestNotificationPermission()
 
         setContent {
@@ -111,6 +109,7 @@ class MainActivity : ComponentActivity() {
             REQUEST_OVERLAY_PERMISSION -> {
                 if (Settings.canDrawOverlays(this)) {
                     Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
+                    checkBatteryOptimization() // <-- move here
                     startServicesIfReady()
                 } else {
                     Toast.makeText(this, "Overlay permission is required to start the service", Toast.LENGTH_SHORT).show()
@@ -118,6 +117,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
 
     private fun checkBatteryOptimization() {
         val packageName = packageName
@@ -144,11 +144,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun RingStatusView(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-
     Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = modifier
+            .fillMaxSize(), // Ensure full size for centering
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center // Center vertically
     ) {
         Icon(
             painter = painterResource(id = R.drawable.ic_ring_active),
@@ -160,12 +160,14 @@ fun RingStatusView(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Ring Monitoring",
+            text = "NG Ring Monitoring Service",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = Color.Black
         )
 
+        // Buttons are hidden for now
+        /*
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
@@ -187,5 +189,7 @@ fun RingStatusView(modifier: Modifier = Modifier) {
         ) {
             Text("Stop Service")
         }
+        */
     }
 }
+

@@ -9,11 +9,14 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
@@ -27,15 +30,21 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
+import java.io.File
+import java.io.FileOutputStream
 
 class RingMonitoringService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO)
     private var monitoringJob: Job? = null
     private var ringtone: Ringtone? = null
     private var vibrator: Vibrator? = null
+    private var silentMediaPlayer: MediaPlayer? = null
+    private var wakeLock: PowerManager.WakeLock? = null
     private var isRinging = false
     private var isMonitoring = false
     private var isServiceActive = true
+    private var ringtoneJob: Job? = null
+    private var silentPlayerJob: Job? = null
 
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
@@ -73,7 +82,18 @@ class RingMonitoringService : Service() {
         Log.d("RingMonitoringService", "Service created")
         createNotificationChannel()
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+
+        // Acquire wake lock to keep service running
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "RingMonitoringService::WakeLock"
+        )
+        wakeLock?.acquire(10*60*1000L /*10 minutes*/)
+
         startForeground(NOTIFICATION_ID, createNotification())
+        createSilentAudioFile()
+        startSilentAudio()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -110,6 +130,75 @@ class RingMonitoringService : Service() {
         return START_STICKY
     }
 
+    private fun createSilentAudioFile() {
+        try {
+            // Create a very short silent audio file
+            val silentFile = File(filesDir, "silent.wav")
+            if (!silentFile.exists()) {
+                val silentData = byteArrayOf(
+                    0x52, 0x49, 0x46, 0x46, // "RIFF"
+                    0x24, 0x00, 0x00, 0x00, // File size - 8
+                    0x57, 0x41, 0x56, 0x45, // "WAVE"
+                    0x66, 0x6D, 0x74, 0x20, // "fmt "
+                    0x10, 0x00, 0x00, 0x00, // Subchunk1Size
+                    0x01, 0x00, 0x01, 0x00, // AudioFormat, NumChannels
+                    0x44, 0x11, 0x00, 0x00, // SampleRate
+                    0x44, 0x11, 0x00, 0x00, // ByteRate
+                    0x01, 0x00, 0x08, 0x00, // BlockAlign, BitsPerSample
+                    0x64, 0x61, 0x74, 0x61, // "data"
+                    0x00, 0x00, 0x00, 0x00  // Subchunk2Size (0 = silent)
+                )
+
+                FileOutputStream(silentFile).use { fos ->
+                    fos.write(silentData)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("RingMonitoringService", "Failed to create silent audio file", e)
+        }
+    }
+
+    private fun startSilentAudio() {
+        silentPlayerJob = serviceScope.launch {
+            try {
+                val silentFile = File(filesDir, "silent.wav")
+                if (silentFile.exists()) {
+                    silentMediaPlayer = MediaPlayer().apply {
+                        setDataSource(silentFile.absolutePath)
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                .build()
+                        )
+                        setVolume(0.0f, 0.0f) // Silent
+                        isLooping = true
+                        prepare()
+                        start()
+                    }
+                    Log.d("RingMonitoringService", "Silent audio started to maintain service priority")
+                }
+            } catch (e: Exception) {
+                Log.e("RingMonitoringService", "Failed to start silent audio", e)
+            }
+        }
+    }
+
+    private fun stopSilentAudio() {
+        silentPlayerJob?.cancel()
+        silentMediaPlayer?.let { player ->
+            try {
+                if (player.isPlaying) {
+                    player.stop()
+                }
+                player.release()
+            } catch (e: Exception) {
+                Log.e("RingMonitoringService", "Error stopping silent audio", e)
+            }
+        }
+        silentMediaPlayer = null
+    }
+
     private fun startMonitoring() {
         if (isMonitoring) return
 
@@ -134,6 +223,8 @@ class RingMonitoringService : Service() {
                                     stopRinging()
                                 }
                             }
+                        } else {
+                            Log.w("RingMonitoringService", "API response not successful: ${response.code()}")
                         }
                     } catch (e: Exception) {
                         if (isActive) {  // Only log if we're still active
@@ -164,54 +255,66 @@ class RingMonitoringService : Service() {
         updateNotification()
     }
 
+    private var currentRingtone: Ringtone? = null  // Make this a class-level variable
+
     private fun startRinging() {
         if (isRinging) return
 
         isRinging = true
         val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
 
-        serviceScope.launch {
-            try {
-                while (isActive) {
-                    val currentRingtone = withContext(Dispatchers.IO) {
-                        RingtoneManager.getRingtone(
-                            this@RingMonitoringService,
-                            alarmUri
-                        ).apply {
-                            setAudioAttributes(
-                                AudioAttributes.Builder()
-                                    .setUsage(AudioAttributes.USAGE_ALARM)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                    .build()
-                            )
-                            play()
-                        }
-                    }
+        // Cancel any existing ringtone job
+        ringtoneJob?.cancel()
 
-                    try {
-                        while (currentRingtone.isPlaying && isActive) {
-                            delay(100)
-                        }
-                    } finally {
-                        currentRingtone.stop()
+        ringtoneJob = serviceScope.launch {
+            try {
+                // Stop silent audio while ringing to avoid conflicts
+                stopSilentAudio()
+
+                // Create and configure the ringtone once
+                currentRingtone = withContext(Dispatchers.IO) {
+                    RingtoneManager.getRingtone(
+                        this@RingMonitoringService,
+                        alarmUri
+                    ).apply {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build()
+                        )
                     }
                 }
+
+                // Start vibration pattern (will loop automatically)
+                val pattern = longArrayOf(0, 1000, 1000)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(pattern, 0)
+                }
+
+                // Start playing (will loop automatically)
+                currentRingtone?.play()
+
+                // Keep alive while we should be ringing
+                while (isActive && isRinging) {
+                    delay(1000) // Just keep checking the flag
+                }
             } catch (e: CancellationException) {
-                // Normal cancellation, no need to log
+                // Normal cancellation
             } catch (e: Exception) {
                 Log.e("RingMonitoringService", "Ringtone error", e)
             } finally {
-                isRinging = false
+                withContext(NonCancellable) {
+                    currentRingtone?.stop()
+                    vibrator?.cancel()
+                    currentRingtone = null
+                    // Restart silent audio after ringing stops
+                    startSilentAudio()
+                }
             }
-        }
-
-        // Start vibration pattern
-        val pattern = longArrayOf(0, 1000, 1000)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator?.vibrate(pattern, 0)
         }
 
         updateNotification()
@@ -221,9 +324,7 @@ class RingMonitoringService : Service() {
         if (!isRinging) return
 
         isRinging = false
-        ringtone?.stop()
-        ringtone = null
-        vibrator?.cancel()
+        ringtoneJob?.cancel()
         updateNotification()
     }
 
@@ -263,10 +364,16 @@ class RingMonitoringService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Build the notification
+        // Build the notification with status indicators
+        val statusText = when {
+            isRinging -> "🔊 RINGING - Tap to view"
+            isMonitoring -> "📡 Active - Monitoring for rings"
+            else -> "⏸️ Inactive - Tap to start"
+        }
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Ring Monitoring")
-            .setContentText(if (isMonitoring) "Active - Polling for rings" else "Inactive - Tap to start")
+            .setContentTitle("Ring Monitoring Service")
+            .setContentText(statusText)
             .setSmallIcon(R.drawable.ic_ring_active)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
@@ -294,6 +401,15 @@ class RingMonitoringService : Service() {
         Log.d("RingMonitoringService", "Service destroyed")
         isServiceActive = false
         stopMonitoring()
+        stopSilentAudio()
+
+        // Release wake lock
+        wakeLock?.let { wl ->
+            if (wl.isHeld) {
+                wl.release()
+            }
+        }
+
         super.onDestroy()
     }
 }

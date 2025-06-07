@@ -1,8 +1,12 @@
 package com.example.ark_notif
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -25,9 +29,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.ark_notif.ui.theme.Ark_notifTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private lateinit var appUpdateService: AppUpdateService
+    private lateinit var connectivityReceiver: ConnectivityReceiver
+    private val coroutineScope = CoroutineScope(Dispatchers.Main)
+
     companion object {
         private const val REQUEST_OVERLAY_PERMISSION = 101
     }
@@ -46,6 +58,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Initialize AppUpdateService
+        appUpdateService = AppUpdateService(this)
+
+        // Initialize and register connectivity receiver
+        connectivityReceiver = ConnectivityReceiver {
+            checkForUpdates()
+        }
+        val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
+        registerReceiver(connectivityReceiver, filter)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !Settings.canDrawOverlays(this)) {
             requestOverlayPermission()
@@ -98,6 +120,7 @@ class MainActivity : ComponentActivity() {
     private fun startServicesIfReady() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(this)) {
             RingMonitoringService.startService(this)
+            checkForUpdates() // Check for updates when services start
         } else {
             Toast.makeText(this, "Overlay permission required to start the service", Toast.LENGTH_SHORT).show()
         }
@@ -109,7 +132,7 @@ class MainActivity : ComponentActivity() {
             REQUEST_OVERLAY_PERMISSION -> {
                 if (Settings.canDrawOverlays(this)) {
                     Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
-                    checkBatteryOptimization() // <-- move here
+                    checkBatteryOptimization()
                     startServicesIfReady()
                 } else {
                     Toast.makeText(this, "Overlay permission is required to start the service", Toast.LENGTH_SHORT).show()
@@ -117,7 +140,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
 
     private fun checkBatteryOptimization() {
         val packageName = packageName
@@ -140,15 +162,35 @@ class MainActivity : ComponentActivity() {
         )
         startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
     }
+
+    private fun checkForUpdates() {
+        coroutineScope.launch {
+            if (isNetworkAvailable()) {
+                appUpdateService.checkForAppUpdate()
+            }
+        }
+    }
+
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val networkInfo = connectivityManager.activeNetworkInfo
+        return networkInfo != null && networkInfo.isConnected
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Unregister the connectivity receiver when the activity is destroyed
+        unregisterReceiver(connectivityReceiver)
+    }
 }
 
 @Composable
 fun RingStatusView(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .fillMaxSize(), // Ensure full size for centering
+            .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center // Center vertically
+        verticalArrangement = Arrangement.Center
     ) {
         Icon(
             painter = painterResource(id = R.drawable.ic_ring_active),
@@ -165,31 +207,17 @@ fun RingStatusView(modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
             color = Color.Black
         )
-
-        // Buttons are hidden for now
-        /*
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = {
-                RingMonitoringService.startService(context)
-            },
-            modifier = Modifier.width(200.dp)
-        ) {
-            Text("Start Service")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                RingMonitoringService.stopService(context)
-            },
-            modifier = Modifier.width(200.dp)
-        ) {
-            Text("Stop Service")
-        }
-        */
     }
 }
 
+class ConnectivityReceiver(private val onNetworkAvailable: () -> Unit) : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+        if (intent?.action == ConnectivityManager.CONNECTIVITY_ACTION) {
+            val connectivityManager = context?.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val networkInfo = connectivityManager.activeNetworkInfo
+            if (networkInfo != null && networkInfo.isConnected) {
+                onNetworkAvailable()
+            }
+        }
+    }
+}

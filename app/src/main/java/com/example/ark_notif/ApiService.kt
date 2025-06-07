@@ -6,5 +6,5 @@ import retrofit2.http.Query
 
 interface ApiService {
     @GET("V4/Others/Kurt/RingAPI/kurt_fetchRing.php")
-    fun getRingStatus(): Call<RingStatusResponse>
+    fun getRingStatus(@Query("deviceId") deviceId: String): Call<NotificationStatusResponse>
 }

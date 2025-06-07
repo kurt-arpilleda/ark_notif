@@ -19,6 +19,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
@@ -36,7 +37,6 @@ import java.io.FileOutputStream
 class RingMonitoringService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO)
     private var monitoringJob: Job? = null
-    private var ringtone: Ringtone? = null
     private var vibrator: Vibrator? = null
     private var silentMediaPlayer: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -45,6 +45,8 @@ class RingMonitoringService : Service() {
     private var isServiceActive = true
     private var ringtoneJob: Job? = null
     private var silentPlayerJob: Job? = null
+    private var currentRingtone: Ringtone? = null
+    private var deviceId: String = "unknown-device"
 
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
@@ -74,12 +76,25 @@ class RingMonitoringService : Service() {
         }
     }
 
+    @SuppressLint("HardwareIds")
+    private fun retrieveDeviceId(): String {
+        return try {
+            Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown-device"
+        } catch (e: Exception) {
+            Log.e("RingMonitoringService", "Error getting device identifier: ${e.message}", e)
+            "unknown-device"
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     @SuppressLint("ForegroundServiceType")
     override fun onCreate() {
         super.onCreate()
         Log.d("RingMonitoringService", "Service created")
+        deviceId = retrieveDeviceId()
+        Log.d("RingMonitoringService", "Device ID: $deviceId")
+
         createNotificationChannel()
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
 
@@ -210,15 +225,15 @@ class RingMonitoringService : Service() {
                 while (isActive) {  // Use isActive instead of manual flags
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            RetrofitClient.instance.getRingStatus().execute()
+                            RetrofitClient.instance.getRingStatus(deviceId).execute()
                         }
 
                         if (response.isSuccessful) {
-                            response.body()?.isRing?.let { ringStatus ->
-                                if (ringStatus == 1 && !isRinging) {
+                            response.body()?.shouldRing?.let { shouldRing ->
+                                if (shouldRing && !isRinging) {
                                     Log.d("RingMonitoringService", "Starting ring")
                                     startRinging()
-                                } else if (ringStatus == 0 && isRinging) {
+                                } else if (!shouldRing && isRinging) {
                                     Log.d("RingMonitoringService", "Stopping ring")
                                     stopRinging()
                                 }
@@ -254,8 +269,6 @@ class RingMonitoringService : Service() {
         stopRinging()
         updateNotification()
     }
-
-    private var currentRingtone: Ringtone? = null  // Make this a class-level variable
 
     private fun startRinging() {
         if (isRinging) return

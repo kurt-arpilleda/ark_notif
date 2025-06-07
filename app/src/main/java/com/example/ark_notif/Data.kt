@@ -24,9 +24,8 @@ data class Element(
 )
 // Update APK end
 
-data class RingStatusResponse(
+data class NotificationStatusResponse(
     val success: Boolean,
-    val isRing: Int? = null,
-    val error: String? = null,
-    val message: String? = null
+    val shouldRing: Boolean?,
+    val error: String?
 )

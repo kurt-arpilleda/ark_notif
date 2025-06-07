@@ -276,30 +276,12 @@ class RingMonitoringService : Service() {
         isRinging = true
         val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
 
-        // Cancel any existing ringtone job
         ringtoneJob?.cancel()
 
         ringtoneJob = serviceScope.launch {
             try {
-                // Stop silent audio while ringing to avoid conflicts
+
                 stopSilentAudio()
-
-                // Create and configure the ringtone once
-                currentRingtone = withContext(Dispatchers.IO) {
-                    RingtoneManager.getRingtone(
-                        this@RingMonitoringService,
-                        alarmUri
-                    ).apply {
-                        setAudioAttributes(
-                            AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_ALARM)
-                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                .build()
-                        )
-                    }
-                }
-
-                // Start vibration pattern (will loop automatically)
                 val pattern = longArrayOf(0, 1000, 1000)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
@@ -308,15 +290,41 @@ class RingMonitoringService : Service() {
                     vibrator?.vibrate(pattern, 0)
                 }
 
-                // Start playing (will loop automatically)
-                currentRingtone?.play()
-
-                // Keep alive while we should be ringing
                 while (isActive && isRinging) {
-                    delay(1000) // Just keep checking the flag
+                    try {
+                        currentRingtone = withContext(Dispatchers.IO) {
+                            RingtoneManager.getRingtone(
+                                this@RingMonitoringService,
+                                alarmUri
+                            ).apply {
+                                setAudioAttributes(
+                                    AudioAttributes.Builder()
+                                        .setUsage(AudioAttributes.USAGE_ALARM)
+                                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                        .build()
+                                )
+                            }
+                        }
+
+                        currentRingtone?.play()
+
+                        while (isActive && isRinging && currentRingtone?.isPlaying == true) {
+                            delay(500)
+                        }
+
+                        currentRingtone?.stop()
+                        currentRingtone = null
+
+                        if (isActive && isRinging) {
+                            delay(200)
+                        }
+
+                    } catch (e: Exception) {
+                        Log.e("RingMonitoringService", "Error in ringtone loop", e)
+                        delay(1000)
+                    }
                 }
             } catch (e: CancellationException) {
-                // Normal cancellation
             } catch (e: Exception) {
                 Log.e("RingMonitoringService", "Ringtone error", e)
             } finally {
@@ -324,7 +332,6 @@ class RingMonitoringService : Service() {
                     currentRingtone?.stop()
                     vibrator?.cancel()
                     currentRingtone = null
-                    // Restart silent audio after ringing stops
                     startSilentAudio()
                 }
             }

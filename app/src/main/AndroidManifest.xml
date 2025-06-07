@@ -10,23 +10,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:allowBackup="true"
         android:largeHeap="true"
-        android:requestLegacyExternalStorage="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -62,10 +51,12 @@
             android:name=".RingMonitoringService"
             android:enabled="true"
             android:stopWithTask="false"
-            android:foregroundServiceType="mediaPlayback|specialUse|systemExempted"
+            android:foregroundServiceType="mediaPlayback"
             android:exported="false">
             <intent-filter>
                 <action android:name="START_MONITORING" />
+                <action android:name="STOP_MONITORING" />
+                <action android:name="TOGGLE_MONITORING" />
             </intent-filter>
         </service>
 

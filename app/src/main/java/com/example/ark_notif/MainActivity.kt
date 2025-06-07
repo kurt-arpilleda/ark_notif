@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,17 +32,14 @@ class MainActivity : ComponentActivity() {
         private const val REQUEST_OVERLAY_PERMISSION = 101
     }
 
-    // Register the notification permission request launcher (Android 13+)
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
             Toast.makeText(this, "Notification permission granted", Toast.LENGTH_SHORT).show()
-            // Start your service if notification permission is granted
             startServicesIfReady()
         } else {
             Toast.makeText(this, "Notification permission denied", Toast.LENGTH_SHORT).show()
-            // You can prompt user or disable features here
         }
     }
 
@@ -54,8 +52,6 @@ class MainActivity : ComponentActivity() {
         }
 
         checkBatteryOptimization()
-
-        // Check and request notification permission if needed
         checkAndRequestNotificationPermission()
 
         setContent {
@@ -82,11 +78,9 @@ class MainActivity : ComponentActivity() {
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED -> {
-                    // Permission granted
                     startServicesIfReady()
                 }
                 shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) -> {
-                    // Optionally explain why the app needs the permission
                     Toast.makeText(
                         this,
                         "Notification permission is needed to alert you with ring notifications.",
@@ -95,22 +89,18 @@ class MainActivity : ComponentActivity() {
                     requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
                 else -> {
-                    // Directly request the permission
                     requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
         } else {
-            // Below Android 13, permission is automatically granted
             startServicesIfReady()
         }
     }
 
     private fun startServicesIfReady() {
-        // Only start RingMonitoringService if overlay permission is granted or SDK < Q
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(this)) {
             RingMonitoringService.startService(this)
         } else {
-            // Overlay permission not granted, maybe notify user
             Toast.makeText(this, "Overlay permission required to start the service", Toast.LENGTH_SHORT).show()
         }
     }
@@ -154,6 +144,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun RingStatusView(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -173,5 +165,27 @@ fun RingStatusView(modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
             color = Color.Black
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = {
+                RingMonitoringService.startService(context)
+            },
+            modifier = Modifier.width(200.dp)
+        ) {
+            Text("Start Service")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                RingMonitoringService.stopService(context)
+            },
+            modifier = Modifier.width(200.dp)
+        ) {
+            Text("Stop Service")
+        }
     }
 }

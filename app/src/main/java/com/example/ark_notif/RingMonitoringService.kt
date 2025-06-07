@@ -186,7 +186,7 @@ class RingMonitoringService : Service() {
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
                 "Ring Monitoring Service",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notification channel for ring monitoring service"
             }
@@ -200,7 +200,7 @@ class RingMonitoringService : Service() {
             .setContentTitle("Ring Monitoring Active")
             .setContentText("Monitoring for ring requests")
             .setSmallIcon(R.drawable.ic_ring_active)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
             .build()
     }

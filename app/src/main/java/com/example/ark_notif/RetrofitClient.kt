@@ -31,7 +31,6 @@ object RetrofitClient {
         level = HttpLoggingInterceptor.Level.NONE
     }
 
-    // Create an unsafe OkHttpClient that trusts all certificates (use carefully!)
     private val unsafeOkHttpClient: OkHttpClient by lazy {
         try {
             // Create a trust manager that does not validate certificate chains

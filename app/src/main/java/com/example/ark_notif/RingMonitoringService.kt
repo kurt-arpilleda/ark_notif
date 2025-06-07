@@ -368,8 +368,14 @@ class RingMonitoringService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // PendingIntent for main activity
-        val contentIntent = Intent(this, MainActivity::class.java)
+        // Create intent for the other app
+        val otherAppIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")
+
+        // Create intent for our own app as fallback
+        val fallbackIntent = Intent(this, MainActivity::class.java)
+
+        // Create the main content intent - will try to open other app first, then fall back to our app
+        val contentIntent = otherAppIntent ?: fallbackIntent
         val contentPendingIntent = PendingIntent.getActivity(
             this,
             0,

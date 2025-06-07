@@ -51,7 +51,7 @@ class RingMonitoringService : Service() {
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
         private const val NOTIFICATION_ID = 1234
-        private const val MONITORING_INTERVAL = 2000L // 2 seconds
+        private const val MONITORING_INTERVAL = 2000L
         const val ACTION_START_MONITORING = "START_MONITORING"
         const val ACTION_STOP_MONITORING = "STOP_MONITORING"
         const val ACTION_TOGGLE_MONITORING = "TOGGLE_MONITORING"
@@ -368,13 +368,10 @@ class RingMonitoringService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Create intent for the other app
         val otherAppIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")
 
-        // Create intent for our own app as fallback
         val fallbackIntent = Intent(this, MainActivity::class.java)
 
-        // Create the main content intent - will try to open other app first, then fall back to our app
         val contentIntent = otherAppIntent ?: fallbackIntent
         val contentPendingIntent = PendingIntent.getActivity(
             this,
@@ -386,12 +383,12 @@ class RingMonitoringService : Service() {
         // Build the notification with status indicators
         val statusText = when {
             isRinging -> "🔊 RINGING - Tap to view"
-            isMonitoring -> "📡 Active - Monitoring for rings"
+            isMonitoring -> "📡 Active - Monitoring for NG"
             else -> "⏸️ Inactive - Tap to start"
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Ring Monitoring Service")
+            .setContentTitle("NG Ring Monitoring Service")
             .setContentText(statusText)
             .setSmallIcon(R.drawable.ic_ring_active)
             .setPriority(NotificationCompat.PRIORITY_LOW)

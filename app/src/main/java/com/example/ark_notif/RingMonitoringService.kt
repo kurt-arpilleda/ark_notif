@@ -431,8 +431,14 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val otherAppIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")
-        val fallbackIntent = Intent(this, MainActivity::class.java)
+        val otherAppIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
+            // Add the phorjp preference as an extra
+            putExtra("phorjp", phorjp)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val fallbackIntent = Intent(this, MainActivity::class.java).apply {
+            putExtra("phorjp", phorjp)
+        }
         val contentIntent = otherAppIntent ?: fallbackIntent
         val contentPendingIntent = PendingIntent.getActivity(
             this,

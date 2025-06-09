@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val REQUEST_OVERLAY_PERMISSION = 101
+        private const val REQUEST_BATTERY_OPTIMIZATION = 102
     }
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
@@ -99,6 +100,16 @@ class MainActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(32.dp))
 
                         MonitoringControls()
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                openBatteryOptimizationSettings()
+                            }
+                        ) {
+                            Text("Open Battery Optimization Settings")
+                        }
                     }
                 }
             }
@@ -153,6 +164,7 @@ class MainActivity : ComponentActivity() {
             // Start the comprehensive monitoring system
             ringMonitoringManager.startMonitoring()
             Toast.makeText(this, "Monitoring system started", Toast.LENGTH_SHORT).show()
+            checkBatteryOptimization()
         } else {
             Toast.makeText(this, "Overlay permission required to start the service", Toast.LENGTH_SHORT).show()
         }
@@ -170,20 +182,52 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, "Overlay permission is required to start the service", Toast.LENGTH_SHORT).show()
                 }
             }
+            REQUEST_BATTERY_OPTIMIZATION -> {
+                // Check if user has disabled battery optimization after returning from settings
+                if (isBatteryOptimizationDisabled()) {
+                    Toast.makeText(this, "Battery optimization disabled - better performance", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
     private fun checkBatteryOptimization() {
-        val packageName = packageName
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!isBatteryOptimizationDisabled()) {
+                showBatteryOptimizationDialog()
+            }
+        }
+    }
+
+    private fun isBatteryOptimizationDisabled(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val powerManager = getSystemService(PowerManager::class.java)
-            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                    .setData(Uri.parse("package:$packageName"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
-                Toast.makeText(this, "Please disable battery optimization for better performance.", Toast.LENGTH_LONG).show()
-            }
+            return powerManager.isIgnoringBatteryOptimizations(packageName)
+        }
+        return true // For versions below Marshmallow, return true as optimization doesn't exist
+    }
+
+    private fun showBatteryOptimizationDialog() {
+        Toast.makeText(
+            this,
+            "Please disable battery optimization for better performance.",
+            Toast.LENGTH_LONG
+        ).show()
+
+        // Directly open battery optimization settings
+        openBatteryOptimizationSettings()
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                .setData(Uri.parse("package:$packageName"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivityForResult(intent, REQUEST_BATTERY_OPTIMIZATION)
+        } else {
+            // For older versions, open general battery settings
+            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            startActivity(intent)
         }
     }
 

@@ -1,6 +1,7 @@
 package com.example.ark_notif
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
@@ -15,30 +16,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.example.ark_notif.ui.theme.Ark_notifTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,7 +50,7 @@ class MainActivity : ComponentActivity() {
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
+    ) { isGranted ->
         if (isGranted) {
             Toast.makeText(this, "Notification permission granted", Toast.LENGTH_SHORT).show()
             startServicesIfReady()
@@ -70,59 +63,111 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Initialize services
         appUpdateService = AppUpdateService(this)
         ringMonitoringManager = RingMonitoringManager.getInstance(this)
 
-        connectivityReceiver = NetworkUtils.ConnectivityReceiver {
-            checkForUpdates()
-        }
-        val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
-        registerReceiver(connectivityReceiver, filter)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !Settings.canDrawOverlays(this)) {
-            requestOverlayPermission()
-        }
-        checkAndRequestNotificationPermission()
-
         setContent {
-            Ark_notifTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Column(
-                        modifier = Modifier
-                            .padding(innerPadding)
-                            .fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        RingStatusView()
+            val context = LocalContext.current
+            val prefs = remember { context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE) }
+            var country by remember { mutableStateOf(prefs.getString("phorjp", null)) }
 
-                        Spacer(modifier = Modifier.height(32.dp))
+            if (country == null) {
+                CountrySelectionDialog { selected ->
+                    prefs.edit { putString("phorjp", selected) }
+                    country = selected
+                }
+            } else {
+                MainAppContent(country!!)
+            }
+        }
+    }
 
-                        MonitoringControls()
+    @Composable
+    fun MainAppContent(countryCode: String) {
+        val context = LocalContext.current
 
-                        Spacer(modifier = Modifier.height(16.dp))
+        LaunchedEffect(Unit) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !Settings.canDrawOverlays(context)) {
+                requestOverlayPermission()
+            }
+            checkAndRequestNotificationPermission()
+        }
 
-                        Button(
-                            onClick = {
-                                openBatteryOptimizationSettings()
-                            }
-                        ) {
-                            Text("Open Battery Optimization Settings")
-                        }
+        registerReceiver()
+
+        Ark_notifTheme {
+            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Column(
+                    modifier = Modifier
+                        .padding(innerPadding)
+                        .fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    RingStatusView(countryCode)
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    MonitoringControls()
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(onClick = { openBatteryOptimizationSettings() }) {
+                        Text("Open Battery Optimization Settings")
                     }
                 }
             }
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        try {
-            unregisterReceiver(connectivityReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Receiver was not registered
+    @Composable
+    fun CountrySelectionDialog(onCountrySelected: (String) -> Unit) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("PH or JP", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
+            },
+            text = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.philippinesflag),
+                        contentDescription = "Philippines",
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clickable { onCountrySelected("ph") }
+                    )
+                    Spacer(modifier = Modifier.width(45.dp))
+                    Image(
+                        painter = painterResource(id = R.drawable.japan),
+                        contentDescription = "Japan",
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clickable { onCountrySelected("jp") }
+                    )
+                }
+            },
+            confirmButton = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+        )
+    }
+
+    private fun registerReceiver() {
+        connectivityReceiver = NetworkUtils.ConnectivityReceiver {
+            checkForUpdates()
         }
+        val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
+        registerReceiver(connectivityReceiver, filter)
     }
 
     private fun checkForUpdates() {
@@ -139,9 +184,8 @@ class MainActivity : ComponentActivity() {
                 ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED -> {
-                    startServicesIfReady()
-                }
+                ) == PackageManager.PERMISSION_GRANTED -> startServicesIfReady()
+
                 shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) -> {
                     Toast.makeText(
                         this,
@@ -150,6 +194,7 @@ class MainActivity : ComponentActivity() {
                     ).show()
                     requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
+
                 else -> {
                     requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
@@ -161,12 +206,19 @@ class MainActivity : ComponentActivity() {
 
     private fun startServicesIfReady() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(this)) {
-            // Start the comprehensive monitoring system
             ringMonitoringManager.startMonitoring()
             Toast.makeText(this, "Monitoring system started", Toast.LENGTH_SHORT).show()
             checkBatteryOptimization()
         } else {
             Toast.makeText(this, "Overlay permission required to start the service", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(connectivityReceiver)
+        } catch (e: IllegalArgumentException) {
         }
     }
 
@@ -183,7 +235,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
             REQUEST_BATTERY_OPTIMIZATION -> {
-                // Check if user has disabled battery optimization after returning from settings
                 if (isBatteryOptimizationDisabled()) {
                     Toast.makeText(this, "Battery optimization disabled - better performance", Toast.LENGTH_SHORT).show()
                 }
@@ -204,7 +255,7 @@ class MainActivity : ComponentActivity() {
             val powerManager = getSystemService(PowerManager::class.java)
             return powerManager.isIgnoringBatteryOptimizations(packageName)
         }
-        return true // For versions below Marshmallow, return true as optimization doesn't exist
+        return true
     }
 
     private fun showBatteryOptimizationDialog() {
@@ -213,8 +264,6 @@ class MainActivity : ComponentActivity() {
             "Please disable battery optimization for better performance.",
             Toast.LENGTH_LONG
         ).show()
-
-        // Directly open battery optimization settings
         openBatteryOptimizationSettings()
     }
 
@@ -225,7 +274,6 @@ class MainActivity : ComponentActivity() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivityForResult(intent, REQUEST_BATTERY_OPTIMIZATION)
         } else {
-            // For older versions, open general battery settings
             val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
             startActivity(intent)
         }
@@ -243,9 +291,7 @@ class MainActivity : ComponentActivity() {
     private fun MonitoringControls() {
         var isMonitoring by remember { mutableStateOf(false) }
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Button(
                 onClick = {
                     if (isMonitoring) {
@@ -270,30 +316,51 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
-}
 
-@Composable
-fun RingStatusView(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            painter = painterResource(id = R.drawable.ic_ring_active),
-            contentDescription = "Monitoring Status",
-            tint = Color.Red,
-            modifier = Modifier.size(120.dp)
-        )
+    @Composable
+    fun RingStatusView(countryCode: String) {
+        val context = LocalContext.current
+        val prefs = remember { context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE) }
+        var currentCountry by remember { mutableStateOf(countryCode) }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        val iconRes = when (currentCountry) {
+            "ph" -> R.drawable.philippinesflag
+            "jp" -> R.drawable.japan
+            else -> R.drawable.ic_ring_active
+        }
 
-        Text(
-            text = "NG Ring Monitoring Service",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black
-        )
+        val title = when (currentCountry) {
+            "ph" -> "NG Ring Monitoring Service"
+            "jp" -> "NG リング監視サービス"
+            else -> "NG Ring Monitoring Service"
+        }
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = "Monitoring Status",
+                tint = Color.Unspecified,
+                modifier = Modifier
+                    .size(120.dp)
+                    .clickable {
+                        // Toggle value and save to SharedPreferences
+                        currentCountry = if (currentCountry == "ph") "jp" else "ph"
+                        prefs.edit { putString("phorjp", currentCountry) }
+                    }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = title,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+        }
     }
 }

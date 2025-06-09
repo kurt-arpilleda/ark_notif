@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -34,7 +35,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import java.io.File
 import java.io.FileOutputStream
 
-class RingMonitoringService : Service() {
+class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceChangeListener {
     private val serviceScope = CoroutineScope(Dispatchers.IO)
     private var monitoringJob: Job? = null
     private var vibrator: Vibrator? = null
@@ -47,6 +48,7 @@ class RingMonitoringService : Service() {
     private var silentPlayerJob: Job? = null
     private var currentRingtone: Ringtone? = null
     private var deviceId: String = "unknown-device"
+    private lateinit var sharedPreferences: SharedPreferences
 
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
@@ -55,6 +57,7 @@ class RingMonitoringService : Service() {
         const val ACTION_START_MONITORING = "START_MONITORING"
         const val ACTION_STOP_MONITORING = "STOP_MONITORING"
         const val ACTION_TOGGLE_MONITORING = "TOGGLE_MONITORING"
+        const val ACTION_RESTART_SERVICE = "RESTART_SERVICE"
 
         fun startService(context: Context) {
             val intent = Intent(context, RingMonitoringService::class.java).apply {
@@ -73,6 +76,17 @@ class RingMonitoringService : Service() {
                 action = ACTION_STOP_MONITORING
             }
             context.stopService(intent)
+        }
+
+        fun restartService(context: Context) {
+            val intent = Intent(context, RingMonitoringService::class.java).apply {
+                action = ACTION_RESTART_SERVICE
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
     }
 
@@ -94,6 +108,10 @@ class RingMonitoringService : Service() {
         Log.d("RingMonitoringService", "Service created")
         deviceId = retrieveDeviceId()
         Log.d("RingMonitoringService", "Device ID: $deviceId")
+
+        // Initialize shared preferences and register listener
+        sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        sharedPreferences.registerOnSharedPreferenceChangeListener(this)
 
         createNotificationChannel()
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -135,6 +153,12 @@ class RingMonitoringService : Service() {
                 }
                 updateNotification()
             }
+            ACTION_RESTART_SERVICE -> {
+                Log.d("RingMonitoringService", "Received restart command")
+                stopMonitoring()
+                startMonitoring()
+                updateNotification()
+            }
             else -> {
                 // Default behavior if no action specified
                 if (!isMonitoring) {
@@ -143,6 +167,13 @@ class RingMonitoringService : Service() {
             }
         }
         return START_STICKY
+    }
+
+    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+        if (key == "phorjp") {
+            Log.d("RingMonitoringService", "phorjp preference changed, restarting service")
+            restartService(this)
+        }
     }
 
     private fun createSilentAudioFile() {
@@ -222,10 +253,19 @@ class RingMonitoringService : Service() {
 
         monitoringJob = serviceScope.launch {
             try {
+                // Get the preference value
+                val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+                val phorjp = prefs.getString("phorjp", null)
+
                 while (isActive) {  // Use isActive instead of manual flags
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            RetrofitClient.instance.getRingStatus(deviceId).execute()
+                            if (phorjp == "jp") {
+                                RetrofitClientJP.instance.getRingStatus(deviceId).execute()
+                            } else {
+                                // Default to PH client
+                                RetrofitClient.instance.getRingStatus(deviceId).execute()
+                            }
                         }
 
                         if (response.isSuccessful) {
@@ -376,6 +416,10 @@ class RingMonitoringService : Service() {
     }
 
     private fun createNotification(): Notification {
+        // Get current preference
+        val phorjp = sharedPreferences.getString("phorjp", null)
+        val isJapanese = phorjp == "jp"
+
         // PendingIntent for toggle action
         val toggleIntent = Intent(this, RingMonitoringService::class.java).apply {
             action = ACTION_TOGGLE_MONITORING
@@ -388,9 +432,7 @@ class RingMonitoringService : Service() {
         )
 
         val otherAppIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")
-
         val fallbackIntent = Intent(this, MainActivity::class.java)
-
         val contentIntent = otherAppIntent ?: fallbackIntent
         val contentPendingIntent = PendingIntent.getActivity(
             this,
@@ -399,17 +441,37 @@ class RingMonitoringService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Build the notification with status indicators
-        val statusText = when {
-            isRinging -> "🔊 RINGING - Tap to view"
-            isMonitoring -> "📡 Active - Monitoring for NG"
-            else -> "⏸️ Inactive - Tap to start"
+        // Determine notification content based on language preference
+        val (title, statusText, toggleText) = if (isJapanese) {
+            Triple(
+                "NG着信監視サービス",
+                when {
+                    isRinging -> "🔊 鳴っています - タップして表示"
+                    isMonitoring -> "📡 アクティブ - 監視中"
+                    else -> "⏸️ 非アクティブ - タップして開始"
+                },
+                if (isMonitoring) "監視を停止" else "監視を開始"
+            )
+        } else {
+            Triple(
+                "NG Ring Monitoring Service",
+                when {
+                    isRinging -> "🔊 RINGING - Tap to view"
+                    isMonitoring -> "📡 Active - Monitoring for NG"
+                    else -> "⏸️ Inactive - Tap to start"
+                },
+                if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+            )
         }
 
+        // Set appropriate icon based on country
+        val flagIcon = if (isJapanese) R.drawable.japan else R.drawable.philippinesflag
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("NG Ring Monitoring Service")
+            .setContentTitle(title)
             .setContentText(statusText)
             .setSmallIcon(R.drawable.ic_ring_active)
+            .setLargeIcon(android.graphics.BitmapFactory.decodeResource(resources, flagIcon))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -417,7 +479,7 @@ class RingMonitoringService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addAction(
                 if (isMonitoring) R.drawable.stop_icon else R.drawable.start_icon,
-                if (isMonitoring) "Stop Monitoring" else "Start Monitoring",
+                toggleText,
                 togglePendingIntent
             )
             .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
@@ -437,6 +499,9 @@ class RingMonitoringService : Service() {
         isServiceActive = false
         stopMonitoring()
         stopSilentAudio()
+
+        // Unregister preference listener
+        sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
 
         // Release wake lock
         wakeLock?.let { wl ->

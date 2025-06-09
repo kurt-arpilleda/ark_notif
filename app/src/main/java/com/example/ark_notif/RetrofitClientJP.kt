@@ -16,9 +16,9 @@ import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicReference
 import javax.net.ssl.*
 
-object RetrofitClient {
-    const val PRIMARY_URL = "http://192.168.254.163/"
-    const val FALLBACK_URL = "http://126.209.7.246/"
+object RetrofitClientJP {
+    const val PRIMARY_URL = "http://192.168.1.213/"
+    const val FALLBACK_URL = "http://220.157.175.232/"
     private const val MAX_RETRIES = 3
     private const val RETRY_DELAY_MS = 500L
     private const val CONNECTION_TIMEOUT_SECONDS = 2L

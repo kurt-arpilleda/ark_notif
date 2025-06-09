@@ -251,13 +251,5 @@ fun RingStatusView(modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
             color = Color.Black
         )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Enhanced with Doze Mode Protection",
-            fontSize = 14.sp,
-            color = Color.Gray
-        )
     }
 }

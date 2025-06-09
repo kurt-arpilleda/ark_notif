@@ -13,6 +13,8 @@ class BootReceiver : BroadcastReceiver() {
             "android.intent.action.QUICKBOOT_POWERON" -> {
                 Log.d("BootReceiver", "Boot completed, starting service")
                 RingMonitoringService.startService(context)
+                val manager = RingMonitoringManager.getInstance(context)
+                manager.startMonitoring()
             }
         }
     }

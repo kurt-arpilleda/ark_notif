@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <queries>
         <package android:name="com.example.ng_notification" />
     </queries>
@@ -67,6 +69,12 @@
                 <action android:name="STOP_MONITORING" />
                 <action android:name="TOGGLE_MONITORING" />
             </intent-filter>
+        </service>
+        <service
+            android:name=".RingMonitoringJobService"
+            android:enabled="true"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE">
         </service>
         <provider
             android:name="androidx.core.content.FileProvider"

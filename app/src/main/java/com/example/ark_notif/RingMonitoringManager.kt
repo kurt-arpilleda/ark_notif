@@ -216,7 +216,6 @@ class RingMonitoringJobService : JobService() {
     }
 }
 
-// WorkManager Worker
 class RingMonitoringWorker(
     context: Context,
     params: WorkerParameters
@@ -230,10 +229,15 @@ class RingMonitoringWorker(
         return try {
             Log.d(TAG, "WorkManager worker executing")
 
-            // Check if service is running
-            if (!ServiceUtils.isServiceRunning(applicationContext, RingMonitoringService::class.java)) {
-                Log.d(TAG, "Service not running, starting from WorkManager")
+            // Get service info if it's running
+            val serviceInfo = ServiceUtils.getServiceInfo(applicationContext, RingMonitoringService::class.java)
 
+            if (serviceInfo != null) {
+                Log.d(TAG, "Service is running since ${serviceInfo.activeSince}ms ago")
+                Log.d(TAG, "Service process: ${serviceInfo.process}")
+                Log.d(TAG, "Service client count: ${serviceInfo.clientCount}")
+            } else {
+                Log.d(TAG, "Service not running, starting from WorkManager")
                 val intent = Intent(applicationContext, RingMonitoringService::class.java).apply {
                     action = RingMonitoringService.ACTION_START_MONITORING
                     putExtra("restart_from_worker", true)

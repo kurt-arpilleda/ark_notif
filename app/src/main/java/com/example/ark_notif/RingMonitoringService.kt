@@ -565,7 +565,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
                 "Ring Monitoring Service",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notification channel for ring monitoring service"
                 setShowBadge(false)
@@ -622,7 +622,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 "NG着信監視サービス",
                 when {
                     isRinging -> "🔊 鳴っています - タップして表示"
-                    isMonitoring -> "📡 アクティブ - 監視中 (${timeSinceLastCall}s前, ${apiCallCount}回)"
+                    isMonitoring -> "📡 アクティブ - 監視中 (${apiCallCount}回, ${timeSinceLastCall}s前)"
                     else -> "⏸️ 非アクティブ - タップして開始"
                 },
                 if (isMonitoring) "監視を停止" else "監視を開始"
@@ -632,7 +632,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 "NG Ring Monitoring Service",
                 when {
                     isRinging -> "🔊 RINGING - Tap to view"
-                    isMonitoring -> "📡 Active - Monitoring (${timeSinceLastCall}s ago, ${apiCallCount} calls)"
+                    isMonitoring -> "📡 Active - Monitoring (${apiCallCount} calls, ${timeSinceLastCall}s ago)"
                     else -> "⏸️ Inactive - Tap to start"
                 },
                 if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
@@ -647,7 +647,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             .setContentText(statusText)
             .setSmallIcon(R.drawable.ic_ring_active)
             .setLargeIcon(android.graphics.BitmapFactory.decodeResource(resources, flagIcon))
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(contentPendingIntent)

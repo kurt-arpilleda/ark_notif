@@ -138,14 +138,14 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         Log.d("RingMonitoringService", "Device ID: $deviceId")
 
         // Initialize system services
-        powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
         mainHandler = Handler(Looper.getMainLooper())
         scheduledExecutor = Executors.newScheduledThreadPool(2)
 
         // Initialize shared preferences and register listener
-        sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        sharedPreferences = getSharedPreferences("AppPrefs", MODE_PRIVATE)
         sharedPreferences.registerOnSharedPreferenceChangeListener(this)
 
         createNotificationChannel()
@@ -293,9 +293,17 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if (key == "phorjp") {
-            Log.d("RingMonitoringService", "phorjp preference changed, restarting service")
+            Log.d("RingMonitoringService", "phorjp preference changed to: ${sharedPreferences?.getString(key, "null")}")
+
             mainHandler?.post {
-                restartService(this)
+                try {
+                    restartService(this)
+                    mainHandler?.postDelayed({
+                        sendKeepAlive(this)
+                    }, 1000)
+                } catch (e: Exception) {
+                    Log.e("RingMonitoringService", "Error handling preference change", e)
+                }
             }
         }
     }
@@ -395,7 +403,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         monitoringJob = serviceScope.launch {
             try {
                 // Get the preference value
-                val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+                val prefs = getSharedPreferences("AppPrefs", MODE_PRIVATE)
                 val phorjp = prefs.getString("phorjp", null)
 
                 while (isActive && isServiceActive) {
@@ -665,7 +673,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private fun updateNotification() {
         try {
             val notification = createNotification()
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(NOTIFICATION_ID, notification)
         } catch (e: Exception) {
             Log.e("RingMonitoringService", "Error updating notification", e)

@@ -9,6 +9,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -580,11 +581,9 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     }
 
     private fun createNotification(): Notification {
-        // Get current preference
         val phorjp = sharedPreferences.getString("phorjp", null)
         val isJapanese = phorjp == "jp"
 
-        // PendingIntent for toggle action
         val toggleIntent = Intent(this, RingMonitoringService::class.java).apply {
             action = ACTION_TOGGLE_MONITORING
         }
@@ -596,7 +595,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         )
 
         val otherAppIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
-            // Add the phorjp preference as an extra
             putExtra("phorjp", phorjp)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -611,17 +609,15 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Enhanced status text with more details for Android 14+
         val timeSinceLastCall = if (lastApiCallTime > 0) {
             (System.currentTimeMillis() - lastApiCallTime) / 1000
         } else 0
 
-        // Determine notification content based on language preference
         val (title, statusText, toggleText) = if (isJapanese) {
             Triple(
                 "NG着信監視サービス",
                 when {
-                    isRinging -> "🔊 着信中 - タップして通知を表示"
+                    isRinging -> "🔔 着信中 - タップして通知を表示"
                     isMonitoring -> "📡 アクティブ - 監視中 (${apiCallCount}回, ${timeSinceLastCall}s前)"
                     else -> "⏸️ 非アクティブ - タップして開始"
                 },
@@ -631,7 +627,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             Triple(
                 "NG Ring Monitoring Service",
                 when {
-                    isRinging -> "🔊 RINGING - Tap to view NG NOTIF"
+                    isRinging -> "🔔 RINGING - Tap to view NG NOTIF"
                     isMonitoring -> "📡 Active - Monitoring (${apiCallCount} calls, ${timeSinceLastCall}s ago)"
                     else -> "⏸️ Inactive - Tap to start"
                 },
@@ -639,14 +635,15 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             )
         }
 
-        // Set appropriate icon based on country
         val flagIcon = if (isJapanese) R.drawable.japan else R.drawable.philippinesflag
+
+        val smallIcon = if (isRinging) R.drawable.ic_notif else R.drawable.ic_ring_active
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(statusText)
-            .setSmallIcon(R.drawable.ic_ring_active)
-            .setLargeIcon(android.graphics.BitmapFactory.decodeResource(resources, flagIcon))
+            .setSmallIcon(smallIcon)
+            .setLargeIcon(BitmapFactory.decodeResource(resources, flagIcon))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -661,7 +658,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 .setShowActionsInCompactView(0)
             )
 
-        // For Android 14+, make notification more persistent
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             builder.setCategory(Notification.CATEGORY_SERVICE)
                 .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
@@ -669,6 +665,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         return builder.build()
     }
+
 
     private fun updateNotification() {
         try {

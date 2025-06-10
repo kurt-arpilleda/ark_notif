@@ -621,7 +621,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             Triple(
                 "NG着信監視サービス",
                 when {
-                    isRinging -> "🔊 鳴っています - タップして表示"
+                    isRinging -> "🔊 着信中 - タップして通知を表示"
                     isMonitoring -> "📡 アクティブ - 監視中 (${apiCallCount}回, ${timeSinceLastCall}s前)"
                     else -> "⏸️ 非アクティブ - タップして開始"
                 },
@@ -631,7 +631,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             Triple(
                 "NG Ring Monitoring Service",
                 when {
-                    isRinging -> "🔊 RINGING - Tap to view"
+                    isRinging -> "🔊 RINGING - Tap to view NG NOTIF"
                     isMonitoring -> "📡 Active - Monitoring (${apiCallCount} calls, ${timeSinceLastCall}s ago)"
                     else -> "⏸️ Inactive - Tap to start"
                 },

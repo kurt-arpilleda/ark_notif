@@ -28,7 +28,7 @@ object RetrofitClient {
     private val executor = Executors.newCachedThreadPool()
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BASIC
+        level = HttpLoggingInterceptor.Level.NONE
     }
 
     private val unsafeOkHttpClient: OkHttpClient by lazy {

@@ -41,6 +41,7 @@ import java.io.FileOutputStream
 class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceChangeListener {
     private val serviceScope = CoroutineScope(Dispatchers.IO)
     private var monitoringJob: Job? = null
+    private var periodicRestartJob: Job? = null // New job for periodic restarts
     private var vibrator: Vibrator? = null
     private var silentMediaPlayer: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -57,6 +58,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         private const val CHANNEL_ID = "RingMonitoringChannel"
         private const val NOTIFICATION_ID = 1234
         private const val MONITORING_INTERVAL = 8_000L
+        private const val RESTART_INTERVAL = 300_000L
         const val ACTION_START_MONITORING = "START_MONITORING"
         const val ACTION_STOP_MONITORING = "STOP_MONITORING"
         const val ACTION_TOGGLE_MONITORING = "TOGGLE_MONITORING"
@@ -112,7 +114,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED) // Also monitor airplane mode changes
         }
         registerReceiver(networkChangeReceiver, filter)
-       Log.d("RingMonitoringService", "Service created")
+        Log.d("RingMonitoringService", "Service created")
         deviceId = retrieveDeviceId()
         Log.d("RingMonitoringService", "Device ID: $deviceId")
         RingMonitoringManager.getInstance(this)
@@ -135,6 +137,9 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         startForeground(NOTIFICATION_ID, createNotification())
         createSilentAudioFile()
         startSilentAudio()
+
+        // Start the periodic restart job
+        startPeriodicRestart()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -150,14 +155,17 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             ACTION_STOP_MONITORING -> {
                 Log.d("RingMonitoringService", "Received stop command")
                 stopMonitoring()
+                stopPeriodicRestart()
                 stopSelf()
             }
             ACTION_TOGGLE_MONITORING -> {
                 Log.d("RingMonitoringService", "Received toggle command")
                 if (isMonitoring) {
                     stopMonitoring()
+                    stopPeriodicRestart()
                 } else {
                     startMonitoring()
+                    startPeriodicRestart()
                 }
                 updateNotification()
             }
@@ -182,6 +190,44 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             Log.d("RingMonitoringService", "phorjp preference changed, restarting service")
             restartService(this)
         }
+    }
+
+    private fun startPeriodicRestart() {
+        if (periodicRestartJob?.isActive == true) return // Already running
+
+        periodicRestartJob = serviceScope.launch {
+            try {
+                while (isActive && isServiceActive) {
+                    delay(RESTART_INTERVAL)
+
+                    if (isActive && isServiceActive && isMonitoring) {
+                        Log.d("RingMonitoringService", "Performing periodic monitoring restart")
+
+                        val wasRinging = isRinging
+
+                        stopMonitoring()
+                        delay(100)
+                        startMonitoring()
+
+                        Log.d("RingMonitoringService", "Periodic restart completed, was ringing: $wasRinging")
+                    }
+                }
+            } catch (e: CancellationException) {
+                Log.d("RingMonitoringService", "Periodic restart job cancelled")
+                throw e
+            } catch (e: Exception) {
+                Log.e("RingMonitoringService", "Error in periodic restart", e)
+            }
+        }
+
+        Log.d("RingMonitoringService", "Periodic restart job started (1-minute interval)")
+    }
+
+    // New method to stop periodic restart
+    private fun stopPeriodicRestart() {
+        periodicRestartJob?.cancel()
+        periodicRestartJob = null
+        Log.d("RingMonitoringService", "Periodic restart job stopped")
     }
 
     private fun createSilentAudioFile() {
@@ -561,6 +607,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         Log.d("RingMonitoringService", "Service destroyed")
         isServiceActive = false
         stopMonitoring()
+        stopPeriodicRestart() // Stop the periodic restart job
         stopSilentAudio()
         unregisterReceiver(networkChangeReceiver)
         // Unregister preference listener

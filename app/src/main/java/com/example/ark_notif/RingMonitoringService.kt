@@ -58,7 +58,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         private const val CHANNEL_ID = "RingMonitoringChannel"
         private const val NOTIFICATION_ID = 1234
         private const val MONITORING_INTERVAL = 6_000L
-        private const val RESTART_INTERVAL = 300_000L
+        private const val RESTART_INTERVAL = 60_000L
         const val ACTION_START_MONITORING = "START_MONITORING"
         const val ACTION_STOP_MONITORING = "STOP_MONITORING"
         const val ACTION_TOGGLE_MONITORING = "TOGGLE_MONITORING"
@@ -204,9 +204,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         Log.d("RingMonitoringService", "Performing periodic monitoring restart")
 
                         val wasRinging = isRinging
-
+                        stopSilentAudio()
                         stopMonitoring()
                         delay(100)
+                        startSilentAudio()
                         startMonitoring()
 
                         Log.d("RingMonitoringService", "Periodic restart completed, was ringing: $wasRinging")

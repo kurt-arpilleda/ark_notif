@@ -16,16 +16,19 @@ class RestartReceiver : BroadcastReceiver() {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED -> {
                 Log.d("RestartReceiver", "📱 Device reboot detected at $currentTime")
-                Log.d("RestartReceiver", "🔄 Rescheduling hourly restarts...")
-                ScheduleManager.scheduleHourlyRestarts(context)
+                Log.d("RestartReceiver", "🔄 Rescheduling 15-minute restarts...")
+                ScheduleManager.scheduleQuarterHourlyRestarts(context)
                 Log.d("RestartReceiver", "🚀 Starting service immediately after reboot")
                 RingMonitoringService.startService(context)
             }
             else -> {
                 val scheduledHour = intent.getIntExtra("scheduled_hour", -1)
-                val hourLabel = if (scheduledHour != -1) String.format("%02d:00", scheduledHour) else "unknown time"
+                val scheduledMinute = intent.getIntExtra("scheduled_minute", -1)
+                val timeLabel = if (scheduledHour != -1 && scheduledMinute != -1)
+                    String.format("%02d:%02d", scheduledHour, scheduledMinute)
+                else "unknown time"
 
-                Log.d("RestartReceiver", "⏰ Hourly restart triggered at $currentTime (scheduled for $hourLabel)")
+                Log.d("RestartReceiver", "⏰ 15-minute restart triggered at $currentTime (scheduled for $timeLabel)")
                 Log.d("RestartReceiver", "🔄 Restarting monitoring service...")
                 RingMonitoringService.restartService(context)
                 Log.d("RestartReceiver", "✅ Service restart initiated")

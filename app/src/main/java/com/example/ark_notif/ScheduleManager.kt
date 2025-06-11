@@ -11,85 +11,90 @@ import java.util.Calendar
 object ScheduleManager {
     private const val TAG = "ScheduleManager"
     private const val ACTION_RESTART_SCHEDULED = "com.example.ark_notif.ACTION_RESTART_SCHEDULED"
-    private const val BASE_REQUEST_CODE = 1000 // Base for hourly request codes
+    private const val BASE_REQUEST_CODE = 1000 // Base for request codes
 
-    fun scheduleHourlyRestarts(context: Context) {
+    fun scheduleQuarterHourlyRestarts(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-//        Log.d(TAG, "⏳ Scheduling hourly restarts...")
+        Log.d(TAG, "⏳ Scheduling 15-minute restarts...")
 
         // Cancel any existing alarms first
         cancelScheduledRestarts(context)
 
-        // Schedule for each hour of the day (0-23)
+        // Schedule for every 15 minutes of each hour (0, 15, 30, 45)
         for (hour in 0..23) {
-            val intent = Intent(context, RestartReceiver::class.java).apply {
-                action = ACTION_RESTART_SCHEDULED
-                putExtra("scheduled_hour", hour)
-            }
-
-            val requestCode = BASE_REQUEST_CODE + hour
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                requestCode,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val calendar = Calendar.getInstance().apply {
-                timeInMillis = System.currentTimeMillis()
-                set(Calendar.HOUR_OF_DAY, hour)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-
-                // If it's already past this hour today, schedule for tomorrow
-                if (timeInMillis <= System.currentTimeMillis()) {
-                    add(Calendar.DAY_OF_YEAR, 1)
+            for (minute in listOf(0, 15, 30, 45)) {
+                val intent = Intent(context, RestartReceiver::class.java).apply {
+                    action = ACTION_RESTART_SCHEDULED
+                    putExtra("scheduled_hour", hour)
+                    putExtra("scheduled_minute", minute)
                 }
-            }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    pendingIntent
+                val requestCode = BASE_REQUEST_CODE + (hour * 4) + (minute / 15)
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    requestCode,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
-            } else {
-                alarmManager.setExact(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    pendingIntent
-                )
-            }
 
-//            Log.d(TAG, "⏰ Scheduled restart for ${String.format("%02d:00", hour)}")
+                val calendar = Calendar.getInstance().apply {
+                    timeInMillis = System.currentTimeMillis()
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, minute)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+
+                    // If it's already past this time today, schedule for tomorrow
+                    if (timeInMillis <= System.currentTimeMillis()) {
+                        add(Calendar.DAY_OF_YEAR, 1)
+                    }
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.setExact(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                }
+
+                Log.d(TAG, "⏰ Scheduled restart for ${String.format("%02d:%02d", hour, minute)}")
+            }
         }
 
-//        Log.d(TAG, "✅ Successfully scheduled hourly restarts")
+        Log.d(TAG, "✅ Successfully scheduled 15-minute restarts")
     }
 
     fun cancelScheduledRestarts(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-//        Log.d(TAG, "🛑 Cancelling all scheduled restarts")
+        Log.d(TAG, "🛑 Cancelling all scheduled restarts")
 
-        // Cancel all 24 possible hourly alarms
+        // Cancel all possible alarms (24 hours * 4 intervals = 96 alarms)
         for (hour in 0..23) {
-            val intent = Intent(context, RestartReceiver::class.java).apply {
-                action = ACTION_RESTART_SCHEDULED
+            for (minute in listOf(0, 15, 30, 45)) {
+                val intent = Intent(context, RestartReceiver::class.java).apply {
+                    action = ACTION_RESTART_SCHEDULED
+                }
+
+                val requestCode = BASE_REQUEST_CODE + (hour * 4) + (minute / 15)
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    requestCode,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+
+                alarmManager.cancel(pendingIntent)
+                pendingIntent.cancel()
             }
-
-            val requestCode = BASE_REQUEST_CODE + hour
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                requestCode,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            alarmManager.cancel(pendingIntent)
-            pendingIntent.cancel()
         }
 
-//        Log.d(TAG, "✅ All scheduled restarts cancelled")
+        Log.d(TAG, "✅ All scheduled restarts cancelled")
     }
 }

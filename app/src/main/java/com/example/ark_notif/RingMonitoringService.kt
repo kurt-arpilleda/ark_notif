@@ -109,7 +109,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         deviceId = retrieveDeviceId()
         Log.d("RingMonitoringService", "Device ID: $deviceId")
         RingMonitoringManager.getInstance(this)
-        ScheduleManager.scheduleHourlyRestarts(this)
+        ScheduleManager.scheduleQuarterHourlyRestarts(this)
         // Initialize shared preferences and register listener
         sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         sharedPreferences.registerOnSharedPreferenceChangeListener(this)

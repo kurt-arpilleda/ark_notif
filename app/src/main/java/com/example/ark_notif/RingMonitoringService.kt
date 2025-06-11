@@ -109,6 +109,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         deviceId = retrieveDeviceId()
         Log.d("RingMonitoringService", "Device ID: $deviceId")
         RingMonitoringManager.getInstance(this)
+        ScheduleManager.scheduleHourlyRestarts(this)
         // Initialize shared preferences and register listener
         sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         sharedPreferences.registerOnSharedPreferenceChangeListener(this)
@@ -508,7 +509,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         // Unregister preference listener
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
-
+        ScheduleManager.cancelScheduledRestarts(this)
         // Release wake lock
         wakeLock?.let { wl ->
             if (wl.isHeld) {

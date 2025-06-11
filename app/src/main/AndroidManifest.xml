@@ -78,6 +78,15 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE">
         </service>
+        <receiver
+            android:name=".RestartReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ark_notif.ACTION_RESTART_SCHEDULED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

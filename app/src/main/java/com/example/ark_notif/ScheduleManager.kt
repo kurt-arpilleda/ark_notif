@@ -15,7 +15,7 @@ object ScheduleManager {
 
     fun scheduleHourlyRestarts(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        Log.d(TAG, "⏳ Scheduling hourly restarts...")
+//        Log.d(TAG, "⏳ Scheduling hourly restarts...")
 
         // Cancel any existing alarms first
         cancelScheduledRestarts(context)
@@ -62,15 +62,15 @@ object ScheduleManager {
                 )
             }
 
-            Log.d(TAG, "⏰ Scheduled restart for ${String.format("%02d:00", hour)}")
+//            Log.d(TAG, "⏰ Scheduled restart for ${String.format("%02d:00", hour)}")
         }
 
-        Log.d(TAG, "✅ Successfully scheduled hourly restarts")
+//        Log.d(TAG, "✅ Successfully scheduled hourly restarts")
     }
 
     fun cancelScheduledRestarts(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        Log.d(TAG, "🛑 Cancelling all scheduled restarts")
+//        Log.d(TAG, "🛑 Cancelling all scheduled restarts")
 
         // Cancel all 24 possible hourly alarms
         for (hour in 0..23) {
@@ -90,6 +90,6 @@ object ScheduleManager {
             pendingIntent.cancel()
         }
 
-        Log.d(TAG, "✅ All scheduled restarts cancelled")
+//        Log.d(TAG, "✅ All scheduled restarts cancelled")
     }
 }

@@ -159,6 +159,7 @@ class RingMonitoringManager private constructor(private val context: Context) {
 }
 
 // JobService for API 21+
+@SuppressLint("SpecifyJobSchedulerIdRange")
 class RingMonitoringJobService : JobService() {
     companion object {
         private const val TAG = "RingMonitoringJobService"

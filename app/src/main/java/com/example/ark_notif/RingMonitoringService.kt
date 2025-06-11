@@ -108,9 +108,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     @SuppressLint("ForegroundServiceType")
     override fun onCreate() {
         super.onCreate()
-        val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
+        val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION).apply {
+            addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED) // Also monitor airplane mode changes
+        }
         registerReceiver(networkChangeReceiver, filter)
-        Log.d("RingMonitoringService", "Service created")
+       Log.d("RingMonitoringService", "Service created")
         deviceId = retrieveDeviceId()
         Log.d("RingMonitoringService", "Device ID: $deviceId")
         RingMonitoringManager.getInstance(this)
@@ -423,6 +425,24 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private val networkChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == ConnectivityManager.CONNECTIVITY_ACTION) {
+                val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                val isConnected = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    connectivityManager.activeNetwork != null
+                } else {
+                    @Suppress("DEPRECATION")
+                    connectivityManager.activeNetworkInfo?.isConnected == true
+                }
+
+                if (isConnected) {
+                    Log.d("RingMonitoringService", "Network connected, restarting monitoring")
+                    if (!isMonitoring) {
+                        startMonitoring()
+                    } else {
+                        // If already monitoring, force a restart to ensure fresh connection
+                        stopMonitoring()
+                        startMonitoring()
+                    }
+                }
                 updateNotification()
             }
         }

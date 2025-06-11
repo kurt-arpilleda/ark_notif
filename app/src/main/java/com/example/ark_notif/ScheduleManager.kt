@@ -10,7 +10,7 @@ import java.util.Calendar
 
 object ScheduleManager {
     private const val TAG = "ScheduleManager"
-    private const val ACTION_RESTART_SCHEDULED = "com.example.ark_notif.ACTION_RESTART_SCHEDULED"
+    private const val ACTION_RESTART_SERVICE = "com.example.ark_notif.ACTION_RESTART_SERVICE"
     private const val BASE_REQUEST_CODE = 1000 // Base for request codes
 
     fun scheduleQuarterHourlyRestarts(context: Context) {
@@ -24,7 +24,7 @@ object ScheduleManager {
         for (hour in 0..23) {
             for (minute in listOf(0, 15, 30, 45)) {
                 val intent = Intent(context, RestartReceiver::class.java).apply {
-                    action = ACTION_RESTART_SCHEDULED
+                    action = ACTION_RESTART_SERVICE
                     putExtra("scheduled_hour", hour)
                     putExtra("scheduled_minute", minute)
                 }
@@ -79,7 +79,7 @@ object ScheduleManager {
         for (hour in 0..23) {
             for (minute in listOf(0, 15, 30, 45)) {
                 val intent = Intent(context, RestartReceiver::class.java).apply {
-                    action = ACTION_RESTART_SCHEDULED
+                    action = ACTION_RESTART_SERVICE
                 }
 
                 val requestCode = BASE_REQUEST_CODE + (hour * 4) + (minute / 15)

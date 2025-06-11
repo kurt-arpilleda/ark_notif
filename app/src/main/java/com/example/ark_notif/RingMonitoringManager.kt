@@ -87,8 +87,8 @@ class RingMonitoringManager private constructor(private val context: Context) {
             .setRequiresDeviceIdle(false)
             .apply {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    setMinimumLatency(30 * 1000) // 30 seconds minimum
-                    setOverrideDeadline(60 * 1000) // 1 minute maximum
+                    setMinimumLatency(4 * 60 * 1000) // 4 minutes minimum
+                    setOverrideDeadline(5 * 60 * 1000) // 5 minutes minimum
                 } else {
                     setPeriodic(15 * 60 * 1000) // 15 minutes for older versions
                 }
@@ -192,8 +192,8 @@ class RingMonitoringJobService : JobService() {
                     val componentName = ComponentName(this@RingMonitoringJobService, RingMonitoringJobService::class.java)
                     val jobInfo = JobInfo.Builder(1001, componentName)
                         .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-                        .setMinimumLatency(30 * 1000)
-                        .setOverrideDeadline(60 * 1000)
+                        .setMinimumLatency(4 * 60 * 1000) // 4 minutes minimum
+                        .setOverrideDeadline(5 * 60 * 1000) // 5 minutes minimum
                         .setPersisted(true)
                         .build()
 

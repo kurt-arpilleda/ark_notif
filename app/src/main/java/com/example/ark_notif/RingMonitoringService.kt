@@ -108,7 +108,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         Log.d("RingMonitoringService", "Service created")
         deviceId = retrieveDeviceId()
         Log.d("RingMonitoringService", "Device ID: $deviceId")
-
+        RingMonitoringManager.getInstance(this)
         // Initialize shared preferences and register listener
         sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         sharedPreferences.registerOnSharedPreferenceChangeListener(this)

@@ -8,13 +8,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.security.KeyStore
-import java.security.SecureRandom
-import java.security.cert.CertificateException
-import java.security.cert.X509Certificate
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicReference
-import javax.net.ssl.*
 
 object RetrofitClientJP {
     const val PRIMARY_URL = "http://192.168.1.213/"
@@ -24,54 +19,29 @@ object RetrofitClientJP {
     private const val CONNECTION_TIMEOUT_SECONDS = 2L
     private const val READ_WRITE_TIMEOUT_SECONDS = 10L
 
+    // Track which URL was most recently successful
     private val currentBaseUrl = AtomicReference<String>(PRIMARY_URL)
+
+    // Thread pool for parallel URL checks
     private val executor = Executors.newCachedThreadPool()
 
+    // Configuring the logging interceptor
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BASIC
     }
 
-    private val unsafeOkHttpClient: OkHttpClient by lazy {
-        try {
-            // Create a trust manager that does not validate certificate chains
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                @Throws(CertificateException::class)
-                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
-                }
+    // Create an OkHttpClient with optimized settings
+    private val client = OkHttpClient.Builder()
+        .addInterceptor(loggingInterceptor)
+        .addInterceptor(SmartUrlInterceptor()) // Our improved interceptor
+        .connectTimeout(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(READ_WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(READ_WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .connectionPool(ConnectionPool(5, 1, TimeUnit.MINUTES))
+        .build()
 
-                @Throws(CertificateException::class)
-                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-                }
-
-                override fun getAcceptedIssuers(): Array<X509Certificate> {
-                    return arrayOf()
-                }
-            })
-
-            // Install the all-trusting trust manager
-            val sslContext = SSLContext.getInstance("SSL")
-            sslContext.init(null, trustAllCerts, SecureRandom())
-
-            // Create an ssl socket factory with our all-trusting manager
-            val sslSocketFactory = sslContext.socketFactory
-
-            OkHttpClient.Builder()
-                .sslSocketFactory(sslSocketFactory, trustAllCerts[0] as X509TrustManager)
-                .hostnameVerifier { _, _ -> true } // Bypass hostname verification
-                .addInterceptor(loggingInterceptor)
-                .addInterceptor(SmartUrlInterceptor())
-                .connectTimeout(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .writeTimeout(READ_WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .readTimeout(READ_WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .retryOnConnectionFailure(true)
-                .connectionPool(ConnectionPool(5, 1, TimeUnit.MINUTES))
-                .build()
-        } catch (e: Exception) {
-            throw RuntimeException(e)
-        }
-    }
-
-    // Retrofit instance with unsafe client
+    // Retrofit instance with optimized settings
     val instance: ApiService by lazy {
         val gson = GsonBuilder()
             .setLenient()
@@ -79,15 +49,17 @@ object RetrofitClientJP {
         createRetrofitInstance(currentBaseUrl.get(), gson)
     }
 
+    // Create Retrofit instance based on baseUrl
     private fun createRetrofitInstance(baseUrl: String, gson: com.google.gson.Gson): ApiService {
         return Retrofit.Builder()
             .baseUrl(baseUrl)
-            .client(unsafeOkHttpClient)
+            .client(client)
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(ApiService::class.java)
     }
 
+    // This method will check both URLs in parallel and pick the fastest reachable
     fun updateWorkingUrl() {
         executor.submit {
             val completionService = ExecutorCompletionService<Pair<String, Boolean>>(executor)
@@ -101,16 +73,18 @@ object RetrofitClientJP {
             }
 
             repeat(urls.size) {
-                val future = completionService.take()
+                val future = completionService.take() // blocks until a task completes
                 val (url, reachable) = future.get()
                 if (reachable) {
                     currentBaseUrl.set(url)
                     return@submit
                 }
             }
+            // If neither reachable, do nothing or keep old
         }
     }
 
+    // Check if a URL is reachable via TCP connection
     private fun isUrlReachable(url: String): Boolean {
         return try {
             val host = url.substringAfter("://").substringBefore("/")
@@ -124,10 +98,12 @@ object RetrofitClientJP {
         }
     }
 
+    // Call this method on network change or app startup to update URL
     fun onNetworkConnectivityChanged() {
         updateWorkingUrl()
     }
 
+    // Smart interceptor that tries the preferred URL first, then fallback
     class SmartUrlInterceptor : Interceptor {
         @Throws(IOException::class)
         override fun intercept(chain: Interceptor.Chain): Response {
@@ -177,6 +153,7 @@ object RetrofitClientJP {
         }
     }
 
+    // Switch to alternate URL on failure and re-check
     fun handleConnectionFailure() {
         val current = currentBaseUrl.get()
         val alternate = if (current == PRIMARY_URL) FALLBACK_URL else PRIMARY_URL

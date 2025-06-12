@@ -113,7 +113,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION).apply {
             addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED) // Also monitor airplane mode changes
         }
-        registerReceiver(networkChangeReceiver, filter)
         Log.d("RingMonitoringService", "Service created")
         deviceId = retrieveDeviceId()
         Log.d("RingMonitoringService", "Device ID: $deviceId")
@@ -469,45 +468,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             manager.createNotificationChannel(serviceChannel)
         }
     }
-    private val networkChangeReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == ConnectivityManager.CONNECTIVITY_ACTION) {
-                val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                val isConnected = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    connectivityManager.activeNetwork != null
-                } else {
-                    @Suppress("DEPRECATION")
-                    connectivityManager.activeNetworkInfo?.isConnected == true
-                }
-
-                if (isConnected) {
-                    Log.d("RingMonitoringService", "Network connected, restarting monitoring")
-                    if (!isMonitoring) {
-                        startMonitoring()
-                    } else {
-                        // If already monitoring, force a restart to ensure fresh connection
-                        stopMonitoring()
-                        startMonitoring()
-                    }
-                }
-                updateNotification()
-            }
-        }
-    }
     @SuppressLint("ServiceCast")
     private fun createNotification(): Notification {
         // Get current preference
         val phorjp = sharedPreferences.getString("phorjp", null)
         val isJapanese = phorjp == "jp"
-
-        // Check network connectivity
-        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val isNetworkAvailable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            connectivityManager.activeNetwork != null
-        } else {
-            @Suppress("DEPRECATION")
-            connectivityManager.activeNetworkInfo?.isConnected == true
-        }
 
         // PendingIntent for toggle action
         val toggleIntent = Intent(this, RingMonitoringService::class.java).apply {
@@ -521,6 +486,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         )
 
         val otherAppIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
+            // Add the phorjp preference as an extra
             putExtra("phorjp", phorjp)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -535,43 +501,27 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Determine notification content based on language preference and network status
+        // Determine notification content based on language preference
         val (title, statusText, toggleText) = if (isJapanese) {
-            if (!isNetworkAvailable) {
-                Triple(
-                    "NG着信監視サービス",
-                    "📡 ネットワークオフライン",
-                    if (isMonitoring) "監視を停止" else "監視を開始"
-                )
-            } else {
-                Triple(
-                    "NG着信監視サービス",
-                    when {
-                        isRinging -> "🔊 鳴っています - タップして表示"
-                        isMonitoring -> "📡 アクティブ - 監視中"
-                        else -> "⏸️ 非アクティブ - タップして開始"
-                    },
-                    if (isMonitoring) "監視を停止" else "監視を開始"
-                )
-            }
+            Triple(
+                "NG着信監視サービス",
+                when {
+                    isRinging -> "🔊 鳴っています - タップして表示"
+                    isMonitoring -> "📡 アクティブ - 監視中"
+                    else -> "⏸️ 非アクティブ - タップして開始"
+                },
+                if (isMonitoring) "監視を停止" else "監視を開始"
+            )
         } else {
-            if (!isNetworkAvailable) {
-                Triple(
-                    "NG Ring Monitoring Service",
-                    "📡 Network Offline",
-                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
-                )
-            } else {
-                Triple(
-                    "NG Ring Monitoring Service",
-                    when {
-                        isRinging -> "🔊 RINGING - Tap to view"
-                        isMonitoring -> "📡 Active - Monitoring for NG"
-                        else -> "⏸️ Inactive - Tap to start"
-                    },
-                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
-                )
-            }
+            Triple(
+                "NG Ring Monitoring Service",
+                when {
+                    isRinging -> "🔊 RINGING - Tap to view"
+                    isMonitoring -> "📡 Active - Monitoring for NG"
+                    else -> "⏸️ Inactive - Tap to start"
+                },
+                if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+            )
         }
 
         // Set appropriate icon based on country
@@ -610,7 +560,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         stopMonitoring()
         stopPeriodicRestart() // Stop the periodic restart job
         stopSilentAudio()
-        unregisterReceiver(networkChangeReceiver)
         // Unregister preference listener
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
         ScheduleManager.cancelScheduledRestarts(this)

@@ -125,7 +125,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         RingMonitoringManager.getInstance(this)
-        ScheduleManager.scheduleQuarterHourlyRestarts(this)
 
         // Initialize shared preferences and register listener
         sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
@@ -620,11 +619,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         isServiceActive = false
         stopMonitoring()
         stopSilentAudio()
-
         // Unregister preference listener
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
-        ScheduleManager.cancelScheduledRestarts(this)
-
         // Release wake lock
         wakeLock?.let { wl ->
             if (wl.isHeld) {

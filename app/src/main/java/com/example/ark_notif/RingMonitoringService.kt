@@ -67,20 +67,20 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         private const val CHANNEL_ID = "RingMonitoringChannel"
         private const val NOTIFICATION_ID = 1234
         private const val MONITORING_INTERVAL = 7_000L // 7 seconds
-        private const val RESTART_INTERVAL = 120_000L // 2 minutes
+        private const val RESTART_INTERVAL = 180_000L // 3 minutes
         private const val ALARM_INTERVAL = 300_000L // 5 minutes
-        private const val HEARTBEAT_INTERVAL = 60_000L // 1 minute - New heartbeat
-        private const val KEEP_ALIVE_INTERVAL = 30_000L // 30 seconds - New keep-alive
+        private const val HEARTBEAT_INTERVAL = 60_000L // 1 minute
+        private const val KEEP_ALIVE_INTERVAL = 30_000L // 30 seconds
         private const val ALARM_REQUEST_CODE = 9876
-        private const val HEARTBEAT_REQUEST_CODE = 9877 // New heartbeat code
-        private const val KEEP_ALIVE_REQUEST_CODE = 9878 // New keep-alive code
+        private const val HEARTBEAT_REQUEST_CODE = 9877
+        private const val KEEP_ALIVE_REQUEST_CODE = 9878
         const val ACTION_START_MONITORING = "START_MONITORING"
         const val ACTION_STOP_MONITORING = "STOP_MONITORING"
         const val ACTION_TOGGLE_MONITORING = "TOGGLE_MONITORING"
         const val ACTION_RESTART_SERVICE = "RESTART_SERVICE"
         const val ACTION_ALARM_TRIGGER = "ALARM_TRIGGER"
-        const val ACTION_HEARTBEAT = "HEARTBEAT" // New heartbeat action
-        const val ACTION_KEEP_ALIVE = "KEEP_ALIVE" // New keep-alive action
+        const val ACTION_HEARTBEAT = "HEARTBEAT"
+        const val ACTION_KEEP_ALIVE = "KEEP_ALIVE"
 
         fun startService(context: Context) {
             val intent = Intent(context, RingMonitoringService::class.java).apply {

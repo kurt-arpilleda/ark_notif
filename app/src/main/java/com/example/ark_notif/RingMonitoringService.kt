@@ -245,13 +245,19 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         }
 
         // Ensure silent audio is playing if not ringing
-        if (!isRinging && (silentMediaPlayer?.isPlaying != true)) {
-            startSilentAudio()
+        if (!isRinging) {
+            val shouldRestart = try {
+                silentMediaPlayer?.isPlaying != true
+            } catch (e: IllegalStateException) {
+                true // If we can't check state, assume we need to restart
+            }
+            if (shouldRestart) {
+                startSilentAudio()
+            }
         }
 
         refreshWakeLock()
     }
-
     private fun handleKeepAlive() {
         // Ensure monitoring job is active
         if (isMonitoring && (monitoringJob?.isActive != true)) {
@@ -580,7 +586,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         silentPlayerJob?.cancel()
         silentMediaPlayer?.let { player ->
             try {
-                if (player.isPlaying) player.stop()
+                try {
+                    player.stop()
+                } catch (e: IllegalStateException) {
+                    Log.w("RingMonitoringService", "MediaPlayer already stopped or not prepared", e)
+                }
                 player.release()
             } catch (e: Exception) {
                 Log.e("RingMonitoringService", "Error stopping silent audio", e)

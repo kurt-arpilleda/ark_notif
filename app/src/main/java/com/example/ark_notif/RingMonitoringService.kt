@@ -45,6 +45,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private val serviceScope = CoroutineScope(Dispatchers.IO)
     private var monitoringJob: Job? = null
     private var periodicRestartJob: Job? = null
+    private var heartbeatJob: Job? = null // New heartbeat job
+    private var keepAliveJob: Job? = null // New keep-alive job
     private var vibrator: Vibrator? = null
     private var silentMediaPlayer: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -58,6 +60,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var alarmManager: AlarmManager
     private var alarmPendingIntent: PendingIntent? = null
+    private var heartbeatPendingIntent: PendingIntent? = null // New heartbeat alarm
+    private var keepAlivePendingIntent: PendingIntent? = null // New keep-alive alarm
 
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
@@ -65,12 +69,18 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         private const val MONITORING_INTERVAL = 7_000L // 7 seconds
         private const val RESTART_INTERVAL = 120_000L // 2 minutes
         private const val ALARM_INTERVAL = 300_000L // 5 minutes
+        private const val HEARTBEAT_INTERVAL = 60_000L // 1 minute - New heartbeat
+        private const val KEEP_ALIVE_INTERVAL = 30_000L // 30 seconds - New keep-alive
         private const val ALARM_REQUEST_CODE = 9876
+        private const val HEARTBEAT_REQUEST_CODE = 9877 // New heartbeat code
+        private const val KEEP_ALIVE_REQUEST_CODE = 9878 // New keep-alive code
         const val ACTION_START_MONITORING = "START_MONITORING"
         const val ACTION_STOP_MONITORING = "STOP_MONITORING"
         const val ACTION_TOGGLE_MONITORING = "TOGGLE_MONITORING"
         const val ACTION_RESTART_SERVICE = "RESTART_SERVICE"
         const val ACTION_ALARM_TRIGGER = "ALARM_TRIGGER"
+        const val ACTION_HEARTBEAT = "HEARTBEAT" // New heartbeat action
+        const val ACTION_KEEP_ALIVE = "KEEP_ALIVE" // New keep-alive action
 
         fun startService(context: Context) {
             val intent = Intent(context, RingMonitoringService::class.java).apply {
@@ -131,28 +141,35 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
         alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
 
-        // Setup wake lock
+        // Enhanced wake lock for Android 14
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
             "RingMonitoringService::WakeLock"
-        )
-        wakeLock?.acquire(10 * 60 * 1000L /*10 minutes*/)
+        ).apply {
+            // Longer wake lock duration for Android 14
+            acquire(60 * 60 * 1000L /*1 hour*/)
+        }
 
         startForeground(NOTIFICATION_ID, createNotification())
         createSilentAudioFile()
         startSilentAudio()
 
-        // Start periodic restart
+        // Start all monitoring systems
         startPeriodicRestart()
+        startHeartbeat() // New heartbeat system
+        startKeepAlive() // New keep-alive system
 
         // Register alarm receiver
         registerAlarmReceiver()
     }
+
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun registerAlarmReceiver() {
         val filter = IntentFilter().apply {
             addAction(ACTION_ALARM_TRIGGER)
+            addAction(ACTION_HEARTBEAT)
+            addAction(ACTION_KEEP_ALIVE)
         }
         registerReceiver(alarmReceiver, filter, RECEIVER_EXPORTED)
     }
@@ -162,14 +179,102 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             when (intent.action) {
                 ACTION_ALARM_TRIGGER -> {
                     Log.d("RingMonitoringService", "Alarm triggered, keeping service alive")
-                    // Just being called keeps the service alive
                     if (!isMonitoring) {
                         startSilentAudio()
                         startMonitoring()
                     }
                     scheduleNextAlarm()
                 }
+                ACTION_HEARTBEAT -> {
+                    Log.d("RingMonitoringService", "Heartbeat triggered")
+                    handleHeartbeat()
+                    scheduleNextHeartbeat()
+                }
+                ACTION_KEEP_ALIVE -> {
+                    Log.d("RingMonitoringService", "Keep-alive triggered")
+                    handleKeepAlive()
+                    scheduleNextKeepAlive()
+                }
             }
+        }
+    }
+
+    // New heartbeat system to ensure monitoring continues
+    private fun startHeartbeat() {
+        heartbeatJob = serviceScope.launch {
+            while (isActive && isServiceActive) {
+                try {
+                    delay(HEARTBEAT_INTERVAL)
+                    if (isMonitoring) {
+                        Log.d("RingMonitoringService", "Heartbeat: Monitoring is active")
+                        // Refresh wake lock
+                        refreshWakeLock()
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("RingMonitoringService", "Heartbeat error", e)
+                }
+            }
+        }
+    }
+
+    // New keep-alive system for silent audio
+    private fun startKeepAlive() {
+        keepAliveJob = serviceScope.launch {
+            while (isActive && isServiceActive) {
+                try {
+                    delay(KEEP_ALIVE_INTERVAL)
+                    if (!isRinging && (silentMediaPlayer?.isPlaying != true)) {
+                        Log.d("RingMonitoringService", "Keep-alive: Restarting silent audio")
+                        startSilentAudio()
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("RingMonitoringService", "Keep-alive error", e)
+                }
+            }
+        }
+    }
+
+    private fun handleHeartbeat() {
+        if (!isMonitoring) {
+            Log.w("RingMonitoringService", "Heartbeat detected monitoring stopped, restarting")
+            startMonitoring()
+        }
+
+        // Ensure silent audio is playing if not ringing
+        if (!isRinging && (silentMediaPlayer?.isPlaying != true)) {
+            startSilentAudio()
+        }
+
+        refreshWakeLock()
+    }
+
+    private fun handleKeepAlive() {
+        // Ensure monitoring job is active
+        if (isMonitoring && (monitoringJob?.isActive != true)) {
+            Log.w("RingMonitoringService", "Keep-alive detected monitoring job stopped, restarting")
+            startMonitoring()
+        }
+
+        // Ensure silent audio is playing
+        if (!isRinging && (silentMediaPlayer?.isPlaying != true)) {
+            startSilentAudio()
+        }
+    }
+
+    private fun refreshWakeLock() {
+        try {
+            wakeLock?.let { wl ->
+                if (wl.isHeld) {
+                    wl.release()
+                }
+                wl.acquire(60 * 60 * 1000L /*1 hour*/)
+            }
+        } catch (e: Exception) {
+            Log.e("RingMonitoringService", "Error refreshing wake lock", e)
         }
     }
 
@@ -188,14 +293,92 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val triggerTime = System.currentTimeMillis() + ALARM_INTERVAL
 
         try {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerTime,
-                alarmPendingIntent!!
-            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // For Android 12+ use setExactAndAllowWhileIdle
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    alarmPendingIntent!!
+                )
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    alarmPendingIntent!!
+                )
+            }
             Log.d("RingMonitoringService", "Next alarm scheduled in ${TimeUnit.MILLISECONDS.toMinutes(ALARM_INTERVAL)} minutes")
         } catch (e: Exception) {
             Log.e("RingMonitoringService", "Failed to schedule alarm", e)
+        }
+    }
+
+    private fun scheduleNextHeartbeat() {
+        val heartbeatIntent = Intent(this, RingMonitoringService::class.java).apply {
+            action = ACTION_HEARTBEAT
+        }
+
+        heartbeatPendingIntent = PendingIntent.getService(
+            this,
+            HEARTBEAT_REQUEST_CODE,
+            heartbeatIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val triggerTime = System.currentTimeMillis() + HEARTBEAT_INTERVAL
+
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // For Android 12+ use setExactAndAllowWhileIdle
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    heartbeatPendingIntent!!
+                )
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    heartbeatPendingIntent!!
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("RingMonitoringService", "Failed to schedule heartbeat", e)
+        }
+    }
+
+    private fun scheduleNextKeepAlive() {
+        val keepAliveIntent = Intent(this, RingMonitoringService::class.java).apply {
+            action = ACTION_KEEP_ALIVE
+        }
+
+        keepAlivePendingIntent = PendingIntent.getService(
+            this,
+            KEEP_ALIVE_REQUEST_CODE,
+            keepAliveIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val triggerTime = System.currentTimeMillis() + KEEP_ALIVE_INTERVAL
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // For Android 12+ use setExactAndAllowWhileIdle
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    keepAlivePendingIntent!!
+                )
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    keepAlivePendingIntent!!
+                )
+            }
+        }  catch (e: Exception) {
+            Log.e("RingMonitoringService", "Failed to schedule keep-alive", e)
         }
     }
 
@@ -203,6 +386,14 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         alarmPendingIntent?.let {
             alarmManager.cancel(it)
             alarmPendingIntent = null
+        }
+        heartbeatPendingIntent?.let {
+            alarmManager.cancel(it)
+            heartbeatPendingIntent = null
+        }
+        keepAlivePendingIntent?.let {
+            alarmManager.cancel(it)
+            keepAlivePendingIntent = null
         }
     }
 
@@ -213,12 +404,16 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 if (!isMonitoring) {
                     startMonitoring()
                     scheduleNextAlarm()
+                    scheduleNextHeartbeat()
+                    scheduleNextKeepAlive()
                 }
             }
             ACTION_STOP_MONITORING -> {
                 Log.d("RingMonitoringService", "Received stop command")
                 stopMonitoring()
                 stopPeriodicRestart()
+                stopHeartbeat()
+                stopKeepAlive()
                 cancelAlarms()
                 stopSelf()
             }
@@ -227,11 +422,17 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 if (isMonitoring) {
                     stopMonitoring()
                     stopPeriodicRestart()
+                    stopHeartbeat()
+                    stopKeepAlive()
                     cancelAlarms()
                 } else {
                     startMonitoring()
                     startPeriodicRestart()
+                    startHeartbeat()
+                    startKeepAlive()
                     scheduleNextAlarm()
+                    scheduleNextHeartbeat()
+                    scheduleNextKeepAlive()
                 }
                 updateNotification()
             }
@@ -249,15 +450,37 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 }
                 scheduleNextAlarm()
             }
+            ACTION_HEARTBEAT -> {
+                Log.d("RingMonitoringService", "Received heartbeat")
+                handleHeartbeat()
+                scheduleNextHeartbeat()
+            }
+            ACTION_KEEP_ALIVE -> {
+                Log.d("RingMonitoringService", "Received keep-alive")
+                handleKeepAlive()
+                scheduleNextKeepAlive()
+            }
             else -> {
                 if (!isMonitoring) {
                     startSilentAudio()
                     startMonitoring()
                     scheduleNextAlarm()
+                    scheduleNextHeartbeat()
+                    scheduleNextKeepAlive()
                 }
             }
         }
         return START_STICKY
+    }
+
+    private fun stopHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
+    }
+
+    private fun stopKeepAlive() {
+        keepAliveJob?.cancel()
+        keepAliveJob = null
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
@@ -319,6 +542,9 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     }
 
     private fun startSilentAudio() {
+        // Stop existing player first
+        stopSilentAudio()
+
         silentPlayerJob = serviceScope.launch {
             try {
                 val silentFile = File(filesDir, "silent.wav")
@@ -333,13 +559,19 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         )
                         setVolume(0.0f, 0.0f)
                         isLooping = true
+                        setWakeMode(this@RingMonitoringService, PowerManager.PARTIAL_WAKE_LOCK)
                         prepare()
                         start()
                     }
-                    Log.d("RingMonitoringService", "Silent audio started")
+                    Log.d("RingMonitoringService", "Silent audio started with wake mode")
                 }
             } catch (e: Exception) {
                 Log.e("RingMonitoringService", "Failed to start silent audio", e)
+                // Retry after delay
+                delay(5000)
+                if (isActive && !isRinging) {
+                    startSilentAudio()
+                }
             }
         }
     }
@@ -605,10 +837,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     override fun onDestroy() {
         Log.d("RingMonitoringService", "Service destroyed")
         isServiceActive = false
-        stopMonitoring()
-        stopPeriodicRestart()
-        stopSilentAudio()
-        cancelAlarms()
         try {
             unregisterReceiver(alarmReceiver)
         } catch (e: IllegalArgumentException) {

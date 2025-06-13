@@ -838,6 +838,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     override fun onDestroy() {
         Log.d("RingMonitoringService", "Service destroyed")
         isServiceActive = false
+        stopMonitoring()
+        stopPeriodicRestart()
+        stopSilentAudio()
+        cancelAlarms()
         try {
             unregisterReceiver(alarmReceiver)
         } catch (e: IllegalArgumentException) {

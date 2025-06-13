@@ -202,14 +202,13 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     if (isActive && isServiceActive && isMonitoring) {
                         Log.d("RingMonitoringService", "Performing periodic monitoring restart")
 
-                        val wasRinging = isRinging
                         stopSilentAudio()
                         stopMonitoring()
-                        delay(100)
+
                         startSilentAudio()
                         startMonitoring()
 
-                        Log.d("RingMonitoringService", "Periodic restart completed, was ringing: $wasRinging")
+                        Log.d("RingMonitoringService", "Periodic restart completed successfully.")
                     }
                 }
             } catch (e: CancellationException) {
@@ -222,7 +221,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         Log.d("RingMonitoringService", "Periodic restart job started (1-minute interval)")
     }
-
     // New method to stop periodic restart
     private fun stopPeriodicRestart() {
         periodicRestartJob?.cancel()

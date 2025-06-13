@@ -164,6 +164,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     Log.d("RingMonitoringService", "Alarm triggered, keeping service alive")
                     // Just being called keeps the service alive
                     if (!isMonitoring) {
+                        startSilentAudio()
                         startMonitoring()
                     }
                     scheduleNextAlarm()
@@ -243,12 +244,14 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             ACTION_ALARM_TRIGGER -> {
                 Log.d("RingMonitoringService", "Received alarm trigger")
                 if (!isMonitoring) {
+                    startSilentAudio()
                     startMonitoring()
                 }
                 scheduleNextAlarm()
             }
             else -> {
                 if (!isMonitoring) {
+                    startSilentAudio()
                     startMonitoring()
                     scheduleNextAlarm()
                 }

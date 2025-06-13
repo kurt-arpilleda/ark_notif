@@ -683,50 +683,36 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     vibrator?.vibrate(pattern, 0) // 0 means repeat indefinitely
                 }
 
+                // Create and start ringtone once
+                currentRingtone = withContext(Dispatchers.IO) {
+                    RingtoneManager.getRingtone(this@RingMonitoringService, alarmUri).apply {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build()
+                        )
+                    }
+                }
+
+                // Keep ringtone playing continuously while ringing
                 while (isActive && isRinging) {
                     try {
-                        currentRingtone = withContext(Dispatchers.IO) {
-                            RingtoneManager.getRingtone(
-                                this@RingMonitoringService,
-                                alarmUri
-                            ).apply {
-                                setAudioAttributes(
-                                    AudioAttributes.Builder()
-                                        .setUsage(AudioAttributes.USAGE_ALARM)
-                                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                        .build()
-                                )
-                            }
+                        if (currentRingtone?.isPlaying != true) {
+                            currentRingtone?.play()
                         }
-
-                        currentRingtone?.play()
-
-                        try {
-                            while (isActive && isRinging && currentRingtone?.isPlaying == true) {
-                                delay(500)
-                            }
-                        } catch (e: CancellationException) {
-                            currentRingtone?.stop()
-                            vibrator?.cancel() // Cancel vibration when stopped
-                            throw e
-                        }
-
-                        currentRingtone?.stop()
-                        currentRingtone = null
-
-                        if (isActive && isRinging) {
-                            delay(200)
-                        }
+                        delay(500)
                     } catch (e: Exception) {
                         if (e !is CancellationException) {
-                            Log.e("RingMonitoringService", "Error in ringtone loop", e)
+                            Log.e("RingMonitoringService", "Error maintaining ringtone", e)
                             delay(1000)
                         }
                     }
                 }
+
             } catch (e: CancellationException) {
                 currentRingtone?.stop()
-                vibrator?.cancel() // Cancel vibration when stopped
+                vibrator?.cancel()
                 currentRingtone = null
                 startSilentAudio()
                 throw e
@@ -735,7 +721,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             } finally {
                 withContext(NonCancellable) {
                     currentRingtone?.stop()
-                    vibrator?.cancel() // Ensure vibration is stopped
+                    vibrator?.cancel()
                     currentRingtone = null
                     startSilentAudio()
                 }

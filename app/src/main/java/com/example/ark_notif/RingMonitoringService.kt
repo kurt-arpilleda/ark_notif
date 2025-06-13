@@ -671,12 +671,16 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         ringtoneJob = serviceScope.launch {
             try {
                 stopSilentAudio()
+
+                // Continuous vibration pattern (vibrate for 1s, pause for 1s, repeat)
                 val pattern = longArrayOf(0, 1000, 1000)
+
+                // Start vibration in repeating mode
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                    vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0)) // 0 means repeat indefinitely
                 } else {
                     @Suppress("DEPRECATION")
-                    vibrator?.vibrate(pattern, 0)
+                    vibrator?.vibrate(pattern, 0) // 0 means repeat indefinitely
                 }
 
                 while (isActive && isRinging) {
@@ -703,6 +707,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                             }
                         } catch (e: CancellationException) {
                             currentRingtone?.stop()
+                            vibrator?.cancel() // Cancel vibration when stopped
                             throw e
                         }
 
@@ -721,7 +726,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 }
             } catch (e: CancellationException) {
                 currentRingtone?.stop()
-                vibrator?.cancel()
+                vibrator?.cancel() // Cancel vibration when stopped
                 currentRingtone = null
                 startSilentAudio()
                 throw e
@@ -730,7 +735,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             } finally {
                 withContext(NonCancellable) {
                     currentRingtone?.stop()
-                    vibrator?.cancel()
+                    vibrator?.cancel() // Ensure vibration is stopped
                     currentRingtone = null
                     startSilentAudio()
                 }

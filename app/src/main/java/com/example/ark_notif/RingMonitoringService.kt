@@ -832,6 +832,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     }
 
     private fun updateNotification() {
+        if (monitoringJob?.isActive == true && !isMonitoring) {
+            isMonitoring = true
+        } else if (monitoringJob?.isActive != true && isMonitoring) {
+            isMonitoring = false
+        }
+
         val notification = createNotification()
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, notification)

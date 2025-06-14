@@ -13,7 +13,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.media.AudioAttributes
-import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.Ringtone
 import android.media.RingtoneManager
@@ -131,7 +130,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         deviceId = retrieveDeviceId()
         Log.d("RingMonitoringService", "Service created with device ID: $deviceId")
 
-        sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        sharedPreferences = getSharedPreferences("AppPrefs", MODE_PRIVATE)
         sharedPreferences.registerOnSharedPreferenceChangeListener(this)
 
         createNotificationChannel()
@@ -140,7 +139,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
         alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
 
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
             "RingMonitoringService::WakeLock"
@@ -169,7 +168,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // For API 33+ we must specify the receiver flag
-            registerReceiver(alarmReceiver, filter, Context.RECEIVER_EXPORTED)
+            registerReceiver(alarmReceiver, filter, RECEIVER_EXPORTED)
         } else {
             // For older versions we can register without the flag
             registerReceiver(alarmReceiver, filter)
@@ -230,7 +229,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     if (!isRinging) {
                         val isPlaying = try {
                             silentMediaPlayer?.isPlaying == true
-                        } catch (e: IllegalStateException) {
+                        } catch (_: IllegalStateException) {
                             false
                         }
                         if (!isPlaying) {
@@ -257,7 +256,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         if (!isRinging) {
             val isPlaying = try {
                 silentMediaPlayer?.isPlaying == true
-            } catch (e: IllegalStateException) {
+            } catch (_: IllegalStateException) {
                 false
             }
             if (!isPlaying) {
@@ -277,7 +276,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         if (!isRinging) {
             val isPlaying = try {
                 silentMediaPlayer?.isPlaying == true
-            } catch (e: IllegalStateException) {
+            } catch (_: IllegalStateException) {
                 false
             }
             if (!isPlaying) {
@@ -313,7 +312,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val triggerTime = System.currentTimeMillis() + ALARM_INTERVAL
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerTime,
@@ -347,7 +346,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val triggerTime = System.currentTimeMillis() + HEARTBEAT_INTERVAL
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerTime,
@@ -380,7 +379,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val triggerTime = System.currentTimeMillis() + KEEP_ALIVE_INTERVAL
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerTime,
@@ -614,7 +613,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         monitoringJob = serviceScope.launch {
             try {
-                val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+                val prefs = getSharedPreferences("AppPrefs", MODE_PRIVATE)
                 val phorjp = prefs.getString("phorjp", null)
 
                 while (isActive) {
@@ -834,7 +833,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
     private fun updateNotification() {
         val notification = createNotification()
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 

@@ -27,7 +27,7 @@ object RetrofitClient {
 
     // Configuring the logging interceptor
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BASIC
+        level = HttpLoggingInterceptor.Level.NONE
     }
 
     // Create an OkHttpClient with optimized settings

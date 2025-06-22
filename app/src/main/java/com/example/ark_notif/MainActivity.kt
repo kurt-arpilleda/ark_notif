@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainAppContent(countryCode: String) {
         val context = LocalContext.current
+        var showInstruction by remember { mutableStateOf(true) }
 
         LaunchedEffect(Unit) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !Settings.canDrawOverlays(context)) {
@@ -97,28 +98,35 @@ class MainActivity : ComponentActivity() {
 
         Ark_notifTheme {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                Column(
-                    modifier = Modifier
-                        .padding(innerPadding)
-                        .fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    RingStatusView(countryCode)
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    if (showInstruction) {
+                        InstructionDialog {
+                            showInstruction = false
+                        }
+                    }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        RingStatusView(countryCode)
 
-                    MonitoringControls()
+                        Spacer(modifier = Modifier.height(32.dp))
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        MonitoringControls()
 
-                    Button(onClick = { openBatteryOptimizationSettings() }) {
-                        Text("Open Battery Optimization Settings")
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(onClick = { openBatteryOptimizationSettings() }) {
+                            Text("Open Battery Optimization Settings")
+                        }
                     }
                 }
             }
         }
     }
+
 
     @Composable
     fun CountrySelectionDialog(onCountrySelected: (String) -> Unit) {
@@ -363,4 +371,44 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
+    @Composable
+    fun InstructionDialog(onDismiss: () -> Unit) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text(
+                    text = "Important Setup / 重要な設定",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = """
+        Please do the following in your device settings:
+        - Enable Auto Start or App Launch for this app.
+        - Disable or do not restrict this app in the power saving management.
+        
+        次の設定を端末の設定画面で行ってください:
+        - このアプリの自動起動（またはアプリ起動）を有効にしてください。
+        - 電池節約機能でこのアプリを制限しないでください。
+    """.trimIndent(),
+                        fontSize = 16.sp
+                    )
+
+                }
+            },
+            confirmButton = {
+                Button(onClick = onDismiss) {
+                    Text("OK")
+                }
+            },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        )
+    }
+
 }

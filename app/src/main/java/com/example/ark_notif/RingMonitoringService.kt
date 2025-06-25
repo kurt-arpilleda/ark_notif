@@ -581,12 +581,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                                     .build()
                             )
                             setVolume(0.0f, 0.0f)
-                            // Remove looping - this was a major battery drain
                             isLooping = false
                             prepare()
                             start()
 
-                            // Stop after 5 seconds instead of playing continuously
                             delay(5000)
                             if (isPlaying) {
                                 stop()

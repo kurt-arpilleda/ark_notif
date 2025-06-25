@@ -64,11 +64,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
         private const val NOTIFICATION_ID = 1234
-        private const val MONITORING_INTERVAL = 6_000L
-        private const val RESTART_INTERVAL = 180_000L
-        private const val ALARM_INTERVAL = 300_000L
-        private const val HEARTBEAT_INTERVAL = 60_000L
-        private const val KEEP_ALIVE_INTERVAL = 30_000L
+        private const val MONITORING_INTERVAL = 10_000L // 10s
+        private const val RESTART_INTERVAL = 360_000L // 6m
+        private const val ALARM_INTERVAL = 600_000L // 10m
+        private const val HEARTBEAT_INTERVAL = 300_000L // 5m
+        private const val KEEP_ALIVE_INTERVAL = 120_000L// 2m
         private const val ALARM_REQUEST_CODE = 9876
         private const val HEARTBEAT_REQUEST_CODE = 9877
         private const val KEEP_ALIVE_REQUEST_CODE = 9878

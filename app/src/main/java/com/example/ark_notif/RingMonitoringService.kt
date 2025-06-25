@@ -566,38 +566,36 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private fun startSilentAudio() {
         stopSilentAudio()
 
-        // Only start silent audio when not ringing, and stop it after a short period
-        if (!isRinging) {
-            silentPlayerJob = serviceScope.launch {
-                try {
-                    val silentFile = File(filesDir, "silent.wav")
-                    if (silentFile.exists()) {
-                        silentMediaPlayer = MediaPlayer().apply {
-                            setDataSource(silentFile.absolutePath)
-                            setAudioAttributes(
-                                AudioAttributes.Builder()
-                                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                    .build()
-                            )
-                            setVolume(0.0f, 0.0f)
-                            isLooping = false
-                            prepare()
-                            start()
-
-                            delay(5000)
-                            if (isPlaying) {
-                                stop()
-                            }
-                        }
-                        Log.d("RingMonitoringService", "Silent audio played briefly")
+        silentPlayerJob = serviceScope.launch {
+            try {
+                val silentFile = File(filesDir, "silent.wav")
+                if (silentFile.exists()) {
+                    silentMediaPlayer = MediaPlayer().apply {
+                        setDataSource(silentFile.absolutePath)
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                .build()
+                        )
+                        setVolume(0.0f, 0.0f)
+                        isLooping = true
+                        setWakeMode(this@RingMonitoringService, PowerManager.PARTIAL_WAKE_LOCK)
+                        prepare()
+                        start()
                     }
-                } catch (e: Exception) {
-                    Log.e("RingMonitoringService", "Failed to start silent audio", e)
+                    Log.d("RingMonitoringService", "Silent audio started with wake mode")
+                }
+            } catch (e: Exception) {
+                Log.e("RingMonitoringService", "Failed to start silent audio", e)
+                delay(5000)
+                if (isActive && !isRinging) {
+                    startSilentAudio()
                 }
             }
         }
     }
+
 
     private fun stopSilentAudio() {
         silentPlayerJob?.cancel()

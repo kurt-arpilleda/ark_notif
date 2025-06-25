@@ -253,7 +253,14 @@ class MainActivity : ComponentActivity() {
         )
         startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
     }
-
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(connectivityReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver was not registered, ignore
+        }
+    }
     @Composable
     private fun MonitoringControls() {
         var isMonitoring by remember { mutableStateOf(false) }

@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_OVERLAY_PERMISSION = 101
         private const val REQUEST_BATTERY_OPTIMIZATION = 102
+        private const val REQUEST_UNKNOWN_APP_SOURCES = 103
     }
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
@@ -53,7 +54,7 @@ class MainActivity : ComponentActivity() {
     ) { isGranted ->
         if (isGranted) {
             Toast.makeText(this, "Notification permission granted", Toast.LENGTH_SHORT).show()
-            startServicesIfReady()
+            checkInstallUnknownAppsPermission()
         } else {
             Toast.makeText(this, "Notification permission denied", Toast.LENGTH_SHORT).show()
         }
@@ -90,8 +91,9 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(Unit) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !Settings.canDrawOverlays(context)) {
                 requestOverlayPermission()
+            } else {
+                checkAndRequestNotificationPermission()
             }
-            checkAndRequestNotificationPermission()
         }
 
         registerReceiver()
@@ -127,49 +129,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
-    @Composable
-    fun CountrySelectionDialog(onCountrySelected: (String) -> Unit) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("PH or JP", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                }
-            },
-            text = {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.philippinesflag),
-                        contentDescription = "Philippines",
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clickable { onCountrySelected("ph") }
-                    )
-                    Spacer(modifier = Modifier.width(45.dp))
-                    Image(
-                        painter = painterResource(id = R.drawable.japan),
-                        contentDescription = "Japan",
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clickable { onCountrySelected("jp") }
-                    )
-                }
-            },
-            confirmButton = {},
-            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
-        )
-    }
-
     private fun registerReceiver() {
         connectivityReceiver = NetworkUtils.ConnectivityReceiver {
             checkForUpdates()
@@ -192,20 +151,30 @@ class MainActivity : ComponentActivity() {
                 ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED -> startServicesIfReady()
+                ) == PackageManager.PERMISSION_GRANTED -> checkInstallUnknownAppsPermission()
 
                 shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) -> {
-                    Toast.makeText(
-                        this,
-                        "Notification permission is needed to alert you with ring notifications.",
-                        Toast.LENGTH_LONG
-                    ).show()
                     requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
 
                 else -> {
                     requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
+            }
+        } else {
+            checkInstallUnknownAppsPermission()
+        }
+    }
+
+    private fun checkInstallUnknownAppsPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivityForResult(intent, REQUEST_UNKNOWN_APP_SOURCES)
+            } else {
+                startServicesIfReady()
             }
         } else {
             startServicesIfReady()
@@ -222,24 +191,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        try {
-            unregisterReceiver(connectivityReceiver)
-        } catch (e: IllegalArgumentException) {
-        }
-    }
-
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
             REQUEST_OVERLAY_PERMISSION -> {
                 if (Settings.canDrawOverlays(this)) {
-                    Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
-                    checkBatteryOptimization()
-                    startServicesIfReady()
+                    checkAndRequestNotificationPermission()
                 } else {
                     Toast.makeText(this, "Overlay permission is required to start the service", Toast.LENGTH_SHORT).show()
+                }
+            }
+            REQUEST_UNKNOWN_APP_SOURCES -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    if (packageManager.canRequestPackageInstalls()) {
+                        startServicesIfReady()
+                    } else {
+                        Toast.makeText(this, "Install Unknown Apps permission is required", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
             REQUEST_BATTERY_OPTIMIZATION -> {
@@ -253,7 +221,7 @@ class MainActivity : ComponentActivity() {
     private fun checkBatteryOptimization() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!isBatteryOptimizationDisabled()) {
-                showBatteryOptimizationDialog()
+                openBatteryOptimizationSettings()
             }
         }
     }
@@ -264,15 +232,6 @@ class MainActivity : ComponentActivity() {
             return powerManager.isIgnoringBatteryOptimizations(packageName)
         }
         return true
-    }
-
-    private fun showBatteryOptimizationDialog() {
-        Toast.makeText(
-            this,
-            "Please disable battery optimization for better performance.",
-            Toast.LENGTH_LONG
-        ).show()
-        openBatteryOptimizationSettings()
     }
 
     private fun openBatteryOptimizationSettings() {
@@ -326,6 +285,87 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
+    fun CountrySelectionDialog(onCountrySelected: (String) -> Unit) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("PH or JP", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
+            },
+            text = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.philippinesflag),
+                        contentDescription = "Philippines",
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clickable { onCountrySelected("ph") }
+                    )
+                    Spacer(modifier = Modifier.width(45.dp))
+                    Image(
+                        painter = painterResource(id = R.drawable.japan),
+                        contentDescription = "Japan",
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clickable { onCountrySelected("jp") }
+                    )
+                }
+            },
+            confirmButton = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+        )
+    }
+
+    @Composable
+    fun InstructionDialog(onDismiss: () -> Unit) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text(
+                    text = "Important Setup / 重要な設定",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = """
+        Please do the following in your device settings:
+        - Enable Auto Start or App Launch for this app.
+        - Disable or do not restrict this app in the power saving management.
+
+        次の設定を端末の設定画面で行ってください:
+        - このアプリの自動起動（またはアプリ起動）を有効にしてください。
+        - 電池節約機能でこのアプリを制限しないでください。
+    """.trimIndent(),
+                        fontSize = 16.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = onDismiss) {
+                    Text("OK")
+                }
+            },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        )
+    }
+
+    @Composable
     fun RingStatusView(countryCode: String) {
         val context = LocalContext.current
         val prefs = remember { context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE) }
@@ -355,7 +395,6 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier
                     .size(120.dp)
                     .clickable {
-                        // Toggle value and save to SharedPreferences
                         currentCountry = if (currentCountry == "ph") "jp" else "ph"
                         prefs.edit { putString("phorjp", currentCountry) }
                     }
@@ -371,44 +410,4 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
-    @Composable
-    fun InstructionDialog(onDismiss: () -> Unit) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = {
-                Text(
-                    text = "Important Setup / 重要な設定",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
-                )
-            },
-            text = {
-                Column {
-                    Text(
-                        text = """
-        Please do the following in your device settings:
-        - Enable Auto Start or App Launch for this app.
-        - Disable or do not restrict this app in the power saving management.
-        
-        次の設定を端末の設定画面で行ってください:
-        - このアプリの自動起動（またはアプリ起動）を有効にしてください。
-        - 電池節約機能でこのアプリを制限しないでください。
-    """.trimIndent(),
-                        fontSize = 16.sp
-                    )
-
-                }
-            },
-            confirmButton = {
-                Button(onClick = onDismiss) {
-                    Text("OK")
-                }
-            },
-            properties = DialogProperties(
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false
-            )
-        )
-    }
-
 }

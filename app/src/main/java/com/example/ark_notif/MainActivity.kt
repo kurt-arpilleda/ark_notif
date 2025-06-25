@@ -72,14 +72,28 @@ class MainActivity : ComponentActivity() {
             val prefs = remember { context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE) }
             var country by remember { mutableStateOf(prefs.getString("phorjp", null)) }
 
-            if (country == null) {
-                CountrySelectionDialog { selected ->
-                    prefs.edit { putString("phorjp", selected) }
-                    country = selected
+            // Observe system dark mode
+            val isSystemInDarkTheme = isSystemInDarkTheme()
+
+            Ark_notifTheme(darkTheme = isSystemInDarkTheme) {
+                if (country == null) {
+                    CountrySelectionDialog { selected ->
+                        prefs.edit { putString("phorjp", selected) }
+                        country = selected
+                    }
+                } else {
+                    MainAppContent(country!!)
                 }
-            } else {
-                MainAppContent(country!!)
             }
+        }
+    }
+
+    private fun isSystemInDarkTheme(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        } else {
+            // For older versions, you might want to use a default or shared preference
+            false
         }
     }
 
@@ -99,29 +113,40 @@ class MainActivity : ComponentActivity() {
         registerReceiver()
 
         Ark_notifTheme {
-            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                Box(modifier = Modifier.padding(innerPadding)) {
-                    if (showInstruction) {
-                        InstructionDialog {
-                            showInstruction = false
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    Box(modifier = Modifier.padding(innerPadding)) {
+                        if (showInstruction) {
+                            InstructionDialog {
+                                showInstruction = false
+                            }
                         }
-                    }
 
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        RingStatusView(countryCode)
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            RingStatusView(countryCode)
 
-                        Spacer(modifier = Modifier.height(32.dp))
+                            Spacer(modifier = Modifier.height(32.dp))
 
-                        MonitoringControls()
+                            MonitoringControls()
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        Button(onClick = { openBatteryOptimizationSettings() }) {
-                            Text("Open Battery Optimization Settings")
+                            Button(
+                                onClick = { openBatteryOptimizationSettings() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Text("Open Battery Optimization Settings")
+                            }
                         }
                     }
                 }
@@ -253,6 +278,7 @@ class MainActivity : ComponentActivity() {
         )
         startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
     }
+
     override fun onDestroy() {
         super.onDestroy()
         try {
@@ -261,6 +287,7 @@ class MainActivity : ComponentActivity() {
             // Receiver was not registered, ignore
         }
     }
+
     @Composable
     private fun MonitoringControls() {
         var isMonitoring by remember { mutableStateOf(false) }
@@ -276,7 +303,11 @@ class MainActivity : ComponentActivity() {
                         Toast.makeText(this@MainActivity, "Monitoring started", Toast.LENGTH_SHORT).show()
                     }
                     isMonitoring = !isMonitoring
-                }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
                 Text(if (isMonitoring) "Stop Monitoring" else "Start Monitoring")
             }
@@ -286,7 +317,7 @@ class MainActivity : ComponentActivity() {
             Text(
                 text = if (isMonitoring) "Status: Active" else "Status: Inactive",
                 fontSize = 16.sp,
-                color = if (isMonitoring) Color.Green else Color.Red
+                color = if (isMonitoring) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
             )
         }
     }
@@ -300,7 +331,12 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("PH or JP", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(
+                        "PH or JP",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             },
             text = {
@@ -329,6 +365,8 @@ class MainActivity : ComponentActivity() {
                 }
             },
             confirmButton = {},
+            containerColor = MaterialTheme.colorScheme.surface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
         )
     }
@@ -341,7 +379,8 @@ class MainActivity : ComponentActivity() {
                 Text(
                     text = "Important Setup / 重要な設定",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
+                    fontSize = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             },
             text = {
@@ -356,15 +395,24 @@ class MainActivity : ComponentActivity() {
         - このアプリの自動起動（またはアプリ起動）を有効にしてください。
         - 電池節約機能でこのアプリを制限しないでください。
     """.trimIndent(),
-                        fontSize = 16.sp
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             },
             confirmButton = {
-                Button(onClick = onDismiss) {
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
                     Text("OK")
                 }
             },
+            containerColor = MaterialTheme.colorScheme.surface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             properties = DialogProperties(
                 dismissOnBackPress = false,
                 dismissOnClickOutside = false
@@ -413,7 +461,7 @@ class MainActivity : ComponentActivity() {
                 text = title,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.Black
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }

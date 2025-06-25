@@ -12,7 +12,7 @@ import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicReference
 
 object RetrofitClient {
-    const val PRIMARY_URL = "http://192.168.254.163/"
+    const val PRIMARY_URL = "http://192.168.254.162/"
     const val FALLBACK_URL = "http://126.209.7.246/"
     private const val MAX_RETRIES = 3
     private const val RETRY_DELAY_MS = 500L
@@ -27,7 +27,7 @@ object RetrofitClient {
 
     // Configuring the logging interceptor
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BASIC
+        level = HttpLoggingInterceptor.Level.NONE
     }
 
     // Create an OkHttpClient with optimized settings

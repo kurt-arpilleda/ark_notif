@@ -65,10 +65,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         private const val CHANNEL_ID = "RingMonitoringChannel"
         private const val NOTIFICATION_ID = 1234
         private const val MONITORING_INTERVAL = 10_000L // 10s
-        private const val RESTART_INTERVAL = 360_000L // 6m
+        private const val RESTART_INTERVAL = 300_000L // 6m
         private const val ALARM_INTERVAL = 600_000L // 10m
-        private const val HEARTBEAT_INTERVAL = 300_000L // 5m
-        private const val KEEP_ALIVE_INTERVAL = 120_000L// 2m
+        private const val HEARTBEAT_INTERVAL = 120_000L // 2m
+        private const val KEEP_ALIVE_INTERVAL = 60_000L// 1m
         private const val ALARM_REQUEST_CODE = 9876
         private const val HEARTBEAT_REQUEST_CODE = 9877
         private const val KEEP_ALIVE_REQUEST_CODE = 9878
@@ -145,7 +145,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             "RingMonitoringService::WakeLock"
         ).apply {
             setReferenceCounted(false)
-            acquire(10 * 60 * 1000L /*10 minutes*/)
+            // Reduced from 10 minutes to 2 minutes
+            acquire(2 * 60 * 1000L /*2 minutes*/)
         }
 
         createSilentAudioFile()
@@ -272,8 +273,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             Log.w("RingMonitoringService", "Keep-alive detected monitoring job stopped, restarting")
             startMonitoring()
         }
-
-        if (!isRinging) {
+        if (!isRinging && System.currentTimeMillis() % 300000 == 0L) { // Every 5 minutes
             val isPlaying = try {
                 silentMediaPlayer?.isPlaying == true
             } catch (_: IllegalStateException) {
@@ -289,7 +289,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         try {
             wakeLock?.let { wl ->
                 if (!wl.isHeld) {
-                    wl.acquire(10 * 60 * 1000L /*10 minutes*/)
+                    wl.acquire(2 * 60 * 1000L /*2 minutes*/)
                 }
             }
         } catch (e: Exception) {
@@ -312,7 +312,14 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val triggerTime = System.currentTimeMillis() + ALARM_INTERVAL
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // Use less aggressive scheduling on Android 14+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    alarmPendingIntent!!
+                )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerTime,
@@ -330,7 +337,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             Log.e("RingMonitoringService", "Failed to schedule alarm", e)
         }
     }
-
     private fun scheduleNextHeartbeat() {
         val heartbeatIntent = Intent(this, RingMonitoringService::class.java).apply {
             action = ACTION_HEARTBEAT
@@ -560,31 +566,36 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private fun startSilentAudio() {
         stopSilentAudio()
 
-        silentPlayerJob = serviceScope.launch {
-            try {
-                val silentFile = File(filesDir, "silent.wav")
-                if (silentFile.exists()) {
-                    silentMediaPlayer = MediaPlayer().apply {
-                        setDataSource(silentFile.absolutePath)
-                        setAudioAttributes(
-                            AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_MEDIA)
-                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                .build()
-                        )
-                        setVolume(0.0f, 0.0f)
-                        isLooping = true
-                        setWakeMode(this@RingMonitoringService, PowerManager.PARTIAL_WAKE_LOCK)
-                        prepare()
-                        start()
+        // Only start silent audio when not ringing, and stop it after a short period
+        if (!isRinging) {
+            silentPlayerJob = serviceScope.launch {
+                try {
+                    val silentFile = File(filesDir, "silent.wav")
+                    if (silentFile.exists()) {
+                        silentMediaPlayer = MediaPlayer().apply {
+                            setDataSource(silentFile.absolutePath)
+                            setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                    .build()
+                            )
+                            setVolume(0.0f, 0.0f)
+                            // Remove looping - this was a major battery drain
+                            isLooping = false
+                            prepare()
+                            start()
+
+                            // Stop after 5 seconds instead of playing continuously
+                            delay(5000)
+                            if (isPlaying) {
+                                stop()
+                            }
+                        }
+                        Log.d("RingMonitoringService", "Silent audio played briefly")
                     }
-                    Log.d("RingMonitoringService", "Silent audio started with wake mode")
-                }
-            } catch (e: Exception) {
-                Log.e("RingMonitoringService", "Failed to start silent audio", e)
-                delay(5000)
-                if (isActive && !isRinging) {
-                    startSilentAudio()
+                } catch (e: Exception) {
+                    Log.e("RingMonitoringService", "Failed to start silent audio", e)
                 }
             }
         }

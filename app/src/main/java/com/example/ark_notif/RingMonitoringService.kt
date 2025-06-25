@@ -67,8 +67,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         private const val MONITORING_INTERVAL = 8_000L // 8s
         private const val RESTART_INTERVAL = 300_000L // 6m
         private const val ALARM_INTERVAL = 600_000L // 10m
-        private const val HEARTBEAT_INTERVAL = 120_000L // 2m
-        private const val KEEP_ALIVE_INTERVAL = 60_000L// 1m
+        private const val HEARTBEAT_INTERVAL = 300_000L // 5m
+        private const val KEEP_ALIVE_INTERVAL = 180_000L // 3m
         private const val ALARM_REQUEST_CODE = 9876
         private const val HEARTBEAT_REQUEST_CODE = 9877
         private const val KEEP_ALIVE_REQUEST_CODE = 9878

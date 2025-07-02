@@ -807,10 +807,18 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Always try to open com.example.ng_notification first
-        val contentIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        } ?: Intent(this, MainActivity::class.java)
+        // Determine which app to open based on notification type
+        val contentIntent = when (notificationType) {
+            "NG" -> packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            "PAGING" -> Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            else -> packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            } ?: Intent(this, MainActivity::class.java)
+        }
 
         val contentPendingIntent = PendingIntent.getActivity(
             this,
@@ -887,7 +895,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             )
             .build()
     }
-
     private fun updateNotification() {
         if (monitoringJob?.isActive == true && !isMonitoring) {
             isMonitoring = true

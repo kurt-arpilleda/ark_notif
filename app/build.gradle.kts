@@ -67,4 +67,10 @@ dependencies {
     implementation ("androidx.lifecycle:lifecycle-service:2.9.0")
     implementation ("androidx.media:media:1.7.0")
     implementation ("androidx.work:work-multiprocess:2.10.1")
+
+    implementation("androidx.compose.material3:material3:1.3.0") // Material 3 for BottomNavigation
+    implementation("androidx.compose.material:material-icons-extended:1.7.8") // Extended Material Icons
+    implementation("io.coil-kt:coil-compose:2.3.0")
+    implementation ("androidx.navigation:navigation-compose:2.8.8")
+    implementation ("io.coil-kt:coil-gif:2.4.0")
 }

@@ -843,7 +843,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     "リング監視サービス",
                     when {
                         isRinging -> "🔊 鳴っています - タップして表示"
-                        isMonitoring -> "📡 アクティブ - NGとページングの監視"
+                        isMonitoring -> "📡 アクティブ - モニタリング"
                         else -> "⏸️ 非アクティブ - タップして開始"
                     },
                     if (isMonitoring) "監視を停止" else "監視を開始"
@@ -865,7 +865,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     "Ring Monitoring Service",
                     when {
                         isRinging -> "🔊 RINGING - Tap to view"
-                        isMonitoring -> "📡 Active - Monitoring for NG and Paging"
+                        isMonitoring -> "📡 Active - Monitoring"
                         else -> "⏸️ Inactive - Tap to start"
                     },
                     if (isMonitoring) "Stop Monitoring" else "Start Monitoring"

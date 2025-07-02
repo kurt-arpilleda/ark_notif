@@ -646,10 +646,24 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         val pagingStatus = pagingResponse.body()
 
                         val shouldRing = (ringStatus?.shouldRing == true) || (pagingStatus?.shouldRing == true)
+
+                        // Determine notification type - prioritize PAGING over NG
                         val notificationType = when {
-                            ringStatus?.shouldRing == true -> ringStatus.type
                             pagingStatus?.shouldRing == true -> pagingStatus.type
+                            ringStatus?.shouldRing == true -> ringStatus.type
                             else -> null
+                        }
+
+                        // Update notification type in shared prefs immediately
+                        if (notificationType != null) {
+                            sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
+                        } else {
+                            sharedPreferences.edit().remove("current_notification_type").apply()
+                        }
+
+                        // Update notification UI immediately
+                        withContext(Dispatchers.Main) {
+                            updateNotification()
                         }
 
                         if (shouldRing && !isRinging) {

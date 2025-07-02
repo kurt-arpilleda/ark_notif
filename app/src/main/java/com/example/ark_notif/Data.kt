@@ -27,5 +27,6 @@ data class Element(
 data class NotificationStatusResponse(
     val success: Boolean,
     val shouldRing: Boolean?,
-    val error: String?
+    val error: String?,
+    val type: String? = null
 )

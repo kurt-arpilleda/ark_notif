@@ -10,4 +10,7 @@ interface ApiService {
 
     @GET("V4/Others/Kurt/RingAPI/kurt_fetchRing.php")
     fun getRingStatus(@Query("deviceId") deviceId: String): Call<NotificationStatusResponse>
+
+    @GET("V4/Others/Kurt/RingAPI/kurt_fetchPaging.php")
+    fun getPagingStatus(@Query("deviceId") deviceId: String): Call<NotificationStatusResponse>
 }

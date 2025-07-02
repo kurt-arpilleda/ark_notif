@@ -625,7 +625,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
                 while (isActive) {
                     try {
-                        val response = withContext(Dispatchers.IO) {
+                        // Check both endpoints
+                        val ringResponse = withContext(Dispatchers.IO) {
                             if (phorjp == "jp") {
                                 RetrofitClientJP.instance.getRingStatus(deviceId).execute()
                             } else {
@@ -633,18 +634,30 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                             }
                         }
 
-                        if (response.isSuccessful) {
-                            response.body()?.shouldRing?.let { shouldRing ->
-                                if (shouldRing && !isRinging) {
-                                    Log.d("RingMonitoringService", "Starting ring")
-                                    startRinging()
-                                } else if (!shouldRing && isRinging) {
-                                    Log.d("RingMonitoringService", "Stopping ring")
-                                    stopRinging()
-                                }
+                        val pagingResponse = withContext(Dispatchers.IO) {
+                            if (phorjp == "jp") {
+                                RetrofitClientJP.instance.getPagingStatus(deviceId).execute()
+                            } else {
+                                RetrofitClient.instance.getPagingStatus(deviceId).execute()
                             }
-                        } else {
-                            Log.w("RingMonitoringService", "API response not successful: ${response.code()}")
+                        }
+
+                        val ringStatus = ringResponse.body()
+                        val pagingStatus = pagingResponse.body()
+
+                        val shouldRing = (ringStatus?.shouldRing == true) || (pagingStatus?.shouldRing == true)
+                        val notificationType = when {
+                            ringStatus?.shouldRing == true -> ringStatus.type
+                            pagingStatus?.shouldRing == true -> pagingStatus.type
+                            else -> null
+                        }
+
+                        if (shouldRing && !isRinging) {
+                            Log.d("RingMonitoringService", "Starting ring")
+                            startRinging(notificationType)
+                        } else if (!shouldRing && isRinging) {
+                            Log.d("RingMonitoringService", "Stopping ring")
+                            stopRinging()
                         }
                     } catch (e: Exception) {
                         if (isActive) {
@@ -673,10 +686,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         updateNotification()
     }
 
-    private fun startRinging() {
+    private fun startRinging(notificationType: String?) {
         if (isRinging) return
 
         isRinging = true
+        sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
         val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
 
         ringtoneJob?.cancel()
@@ -744,6 +758,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         if (!isRinging) return
 
         isRinging = false
+        sharedPreferences.edit().remove("current_notification_type").apply()
         ringtoneJob?.cancel()
         updateNotification()
     }
@@ -763,10 +778,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         }
     }
 
-    @SuppressLint("ServiceCast")
     private fun createNotification(): Notification {
         val phorjp = sharedPreferences.getString("phorjp", null)
         val isJapanese = phorjp == "jp"
+        var notificationType = sharedPreferences.getString("current_notification_type", null)
 
         val toggleIntent = Intent(this, RingMonitoringService::class.java).apply {
             action = ACTION_TOGGLE_MONITORING
@@ -778,14 +793,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val otherAppIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
-            putExtra("phorjp", phorjp)
+        // Always try to open com.example.ng_notification first
+        val contentIntent = packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val fallbackIntent = Intent(this, MainActivity::class.java).apply {
-            putExtra("phorjp", phorjp)
-        }
-        val contentIntent = otherAppIntent ?: fallbackIntent
+        } ?: Intent(this, MainActivity::class.java)
+
         val contentPendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -794,25 +806,49 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         )
 
         val (title, statusText, toggleText) = if (isJapanese) {
-            Triple(
-                "NG着信監視サービス",
-                when {
-                    isRinging -> "🔊 鳴っています - タップして表示"
-                    isMonitoring -> "📡 アクティブ - 監視中"
-                    else -> "⏸️ 非アクティブ - タップして開始"
-                },
-                if (isMonitoring) "監視を停止" else "監視を開始"
-            )
+            when (notificationType) {
+                "NG" -> Triple(
+                    "NG Report",
+                    "🔊 鳴っています - タップして表示",
+                    if (isMonitoring) "監視を停止" else "監視を開始"
+                )
+                "PAGING" -> Triple(
+                    "You are being Paged",
+                    "🔊 鳴っています - タップして表示",
+                    if (isMonitoring) "監視を停止" else "監視を開始"
+                )
+                else -> Triple(
+                    "NG Ring Monitoring Service",
+                    when {
+                        isRinging -> "🔊 鳴っています - タップして表示"
+                        isMonitoring -> "📡 アクティブ - 監視中"
+                        else -> "⏸️ 非アクティブ - タップして開始"
+                    },
+                    if (isMonitoring) "監視を停止" else "監視を開始"
+                )
+            }
         } else {
-            Triple(
-                "NG Ring Monitoring Service",
-                when {
-                    isRinging -> "🔊 RINGING - Tap to view"
-                    isMonitoring -> "📡 Active - Monitoring for NG"
-                    else -> "⏸️ Inactive - Tap to start"
-                },
-                if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
-            )
+            when (notificationType) {
+                "NG" -> Triple(
+                    "NG Report",
+                    "🔊 RINGING - Tap to view",
+                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+                )
+                "PAGING" -> Triple(
+                    "You are being Paged",
+                    "🔊 RINGING - Tap to view",
+                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+                )
+                else -> Triple(
+                    "NG Ring Monitoring Service",
+                    when {
+                        isRinging -> "🔊 RINGING - Tap to view"
+                        isMonitoring -> "📡 Active - Monitoring for NG"
+                        else -> "⏸️ Inactive - Tap to start"
+                    },
+                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+                )
+            }
         }
 
         val flagIcon = if (isJapanese) R.drawable.japan else R.drawable.philippinesflag
@@ -822,7 +858,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             .setContentText(statusText)
             .setSmallIcon(R.drawable.ic_ring_active)
             .setLargeIcon(android.graphics.BitmapFactory.decodeResource(resources, flagIcon))
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(contentPendingIntent)

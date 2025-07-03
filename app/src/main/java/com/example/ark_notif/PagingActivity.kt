@@ -46,6 +46,7 @@ import retrofit2.Callback
 import retrofit2.Response
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.runtime.saveable.rememberSaveable
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -312,15 +313,52 @@ class PagingActivity : ComponentActivity() {
         }
 
         fun updateCountryPreference(country: String) {
-            val editor = prefs.edit()
-            editor.putString("phorjp", country)
-            editor.apply()
-            phOrJp = country
-            (context as? Activity)?.let {
-                it.runOnUiThread {
-                    restartActivity()
-                }
+            // Check if user is logged in before allowing country switch
+            val apiService = if (country == "jp") {
+                RetrofitClientJP.instance
+            } else {
+                RetrofitClient.instance
             }
+            apiService.getProfile(deviceId).enqueue(object : Callback<ProfileResponse> {
+                override fun onResponse(call: Call<ProfileResponse>, response: Response<ProfileResponse>) {
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        // User exists, proceed with country switch
+                        val editor = prefs.edit()
+                        editor.putString("phorjp", country)
+                        editor.apply()
+                        phOrJp = country
+                        (context as? Activity)?.let {
+                            it.runOnUiThread {
+                                restartActivity()
+                            }
+                        }
+                    } else {
+                        val message = if (country == "jp") {
+                            if (currentLanguage == "ja") {
+                                "まずアークログジャパンにログインしてください"
+                            } else {
+                                "Please login first to ark log japan"
+                            }
+                        } else {
+                            if (currentLanguage == "ja") {
+                                "まずアークログフィリピンにログインしてください"
+                            } else {
+                                "Please login first to ark log philippines"
+                            }
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    }
+                }
+
+                override fun onFailure(call: Call<ProfileResponse>, t: Throwable) {
+                    val message = if (currentLanguage == "ja") {
+                        "ネットワークエラーが発生しました"
+                    } else {
+                        "Network error occurred"
+                    }
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }
+            })
         }
 
         fun getTranslatedText(englishText: String, japaneseText: String): String {
@@ -528,33 +566,33 @@ class PagingActivity : ComponentActivity() {
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
-                        // Manual Section
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = if (currentLanguage == "ja") 46.dp else 30.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = getTranslatedText("Manual", "手引き"),
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontWeight = FontWeight.Bold
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.width(15.dp))
-
-                            IconButton(
-                                onClick = { /* TODO: Add manual download functionality */ }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MenuBook,
-                                    contentDescription = getTranslatedText("Manual", "手引き"),
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        }
+//                        Spacer(modifier = Modifier.height(20.dp))
+//                        // Manual Section
+//                        Row(
+//                            modifier = Modifier
+//                                .fillMaxWidth()
+//                                .padding(start = if (currentLanguage == "ja") 46.dp else 30.dp),
+//                            verticalAlignment = Alignment.CenterVertically
+//                        ) {
+//                            Text(
+//                                text = getTranslatedText("Manual", "手引き"),
+//                                style = MaterialTheme.typography.bodyLarge.copy(
+//                                    fontWeight = FontWeight.Bold
+//                                )
+//                            )
+//
+//                            Spacer(modifier = Modifier.width(15.dp))
+//
+//                            IconButton(
+//                                onClick = { /* TODO: Add manual download functionality */ }
+//                            ) {
+//                                Icon(
+//                                    imageVector = Icons.Default.MenuBook,
+//                                    contentDescription = getTranslatedText("Manual", "手引き"),
+//                                    modifier = Modifier.size(28.dp)
+//                                )
+//                            }
+//                        }
 
                         Spacer(modifier = Modifier.weight(1f))
 
@@ -578,7 +616,11 @@ class PagingActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clickable { updateCountryPreference("ph") }
+                                    .clickable {
+                                        if (phOrJp != "ph") {
+                                            updateCountryPreference("ph")
+                                        }
+                                    }
                             ) {
                                 Image(
                                     painter = rememberAsyncImagePainter(
@@ -604,7 +646,11 @@ class PagingActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clickable { updateCountryPreference("jp") }
+                                    .clickable {
+                                        if (phOrJp != "jp") {
+                                            updateCountryPreference("jp")
+                                        }
+                                    }
                             ) {
                                 Image(
                                     painter = rememberAsyncImagePainter(
@@ -700,7 +746,7 @@ class PagingActivity : ComponentActivity() {
                                         modifier = Modifier
                                             .size(40.dp)
                                             .clickable {
-                                                // Toggle between countries
+                                                // Toggle between countries with validation
                                                 val newCountry = if (phOrJp == "ph") "jp" else "ph"
                                                 updateCountryPreference(newCountry)
                                             }
@@ -736,8 +782,7 @@ class PagingActivity : ComponentActivity() {
                     var isLoadingPosts by remember { mutableStateOf(true) }
                     var errorLoadingPosts by remember { mutableStateOf<String?>(null) }
 
-                    // Fetch paging posts
-                    LaunchedEffect(deviceId, phOrJp) {
+                    LaunchedEffect(deviceId, phOrJp, currentLanguage) {
                         isLoadingPosts = true
                         errorLoadingPosts = null
 
@@ -766,7 +811,6 @@ class PagingActivity : ComponentActivity() {
                             }
                         })
                     }
-
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()

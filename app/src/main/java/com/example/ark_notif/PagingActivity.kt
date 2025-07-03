@@ -65,7 +65,6 @@ class PagingActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            // Create the ImageLoader here to avoid recreating it on recomposition
             val imageLoader = ImageLoader.Builder(this)
                 .components {
                     if (android.os.Build.VERSION.SDK_INT >= 28) {

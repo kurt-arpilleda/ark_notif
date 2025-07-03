@@ -684,9 +684,10 @@ class PagingActivity : ComponentActivity() {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(end = 30.dp)
                                 ) {
-                                    // Country Flag Image (changes based on current selection)
                                     Image(
                                         painter = rememberAsyncImagePainter(
                                             if (phOrJp == "ph") R.drawable.philippinesflag else R.drawable.japanflag,
@@ -791,17 +792,31 @@ class PagingActivity : ComponentActivity() {
                                     color = Color.Red
                                 )
                             }
-                        } else if (pagingPosts.isEmpty()) {
-                            Box(
+                        }else if (pagingPosts.isEmpty()) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
+                                verticalArrangement = Arrangement.Center
                             ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.questionman),
+                                    contentDescription = getTranslatedText("No Notifications", "通知なし"),
+                                    modifier = Modifier.size(150.dp) // Increased from 100dp to 150dp
+                                )
+
+                                Spacer(modifier = Modifier.height(24.dp)) // Increased spacing from 16dp to 24dp
+
                                 Text(
                                     text = getTranslatedText(
                                         "No active paging notifications",
                                         "アクティブなページング通知はありません"
                                     ),
-                                    color = Color.Gray
+                                    style = MaterialTheme.typography.titleLarge.copy( // Changed from bodyMedium to titleLarge
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Gray,
+                                        fontSize = 20.sp // Explicitly setting larger font size
+                                    ),
+                                    textAlign = TextAlign.Center
                                 )
                             }
                         } else {

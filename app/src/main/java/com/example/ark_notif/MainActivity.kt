@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -433,9 +434,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val title = when (currentCountry) {
-            "ph" -> "NG Ring Monitoring Service"
-            "jp" -> "NG リング監視サービス"
-            else -> "NG Ring Monitoring Service"
+            "ph" -> "Ring Alert Monitoring Service (Arktech Philippines)"
+            "jp" -> "着信アラート監視サービス (Arktech Japan)"
+            else -> "Ring Alert Monitoring Service"
         }
 
         Column(
@@ -457,12 +458,18 @@ class MainActivity : ComponentActivity() {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                text = title,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

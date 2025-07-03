@@ -23,10 +23,26 @@ data class Element(
     val outputFile: String
 )
 // Update APK end
-
 data class NotificationStatusResponse(
     val success: Boolean,
     val shouldRing: Boolean?,
     val error: String?,
     val type: String? = null
+)
+data class ProfileResponse(
+    val success: Boolean,
+    val employee: EmployeeData?,
+    val error: String?
+)
+
+data class EmployeeData(
+    val firstName: String,
+    val surName: String,
+    val idNumber: String,
+    val picture: String,
+    val languageFlag: String
+)
+data class BasicResponse(
+    val success: Boolean,
+    val error: String?
 )

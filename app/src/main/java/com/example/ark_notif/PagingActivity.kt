@@ -3,6 +3,7 @@ package com.example.ark_notif
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
@@ -88,12 +89,25 @@ class PagingActivity : ComponentActivity() {
             "unknown-device"
         }
     }
+
+    private fun restartActivity() {
+        val intent = Intent(this, PagingActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+
+        overridePendingTransition(R.anim.animate_fade_enter, R.anim.animate_fade_exit)
+
+        finish()
+    }
+
+
     @Composable
     fun PagingPostItem(
         post: PagingPost,
         imageLoader: ImageLoader,
         currentLanguage: String,
-        onAcknowledge: (Int) -> Unit
+        onAcknowledge: (Int) -> Unit,
+        phOrJp: String
     ) {
         Card(
             modifier = Modifier
@@ -116,10 +130,17 @@ class PagingActivity : ComponentActivity() {
                     horizontalArrangement = Arrangement.Start
                 ) {
                     AsyncImage(
-                        model = rememberUrlWithFallback(
-                            "http://192.168.254.163/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}",
-                            "http://126.209.7.246/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}"
-                        ),
+                        model = if (phOrJp == "jp") {
+                            rememberUrlWithFallback(
+                                "http://192.168.1.213/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}",
+                                "http://220.157.175.232/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}"
+                            )
+                        } else {
+                            rememberUrlWithFallback(
+                                "http://192.168.254.163/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}",
+                                "http://126.209.7.246/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}"
+                            )
+                        },
                         contentDescription = if (currentLanguage == "ja") "リクエスト者のプロフィール" else "Requester Profile",
                         modifier = Modifier
                             .size(40.dp)
@@ -128,7 +149,6 @@ class PagingActivity : ComponentActivity() {
                         error = painterResource(id = R.drawable.profile_placeholder),
                         imageLoader = imageLoader
                     )
-
                     Spacer(modifier = Modifier.width(12.dp))
 
                     Column {
@@ -207,7 +227,9 @@ class PagingActivity : ComponentActivity() {
             mutableStateOf(prefs.getString("languageFlag", "en") ?: "en")
         }
 
-        var phOrJp by remember { mutableStateOf(prefs.getString("phorjp", "ph") ?: "ph") }
+        var phOrJp by rememberSaveable {
+            mutableStateOf(prefs.getString("phorjp", "ph") ?: "ph")
+        }
 
         // Employee profile state
         var employeeData by remember { mutableStateOf<EmployeeData?>(null) }
@@ -219,7 +241,7 @@ class PagingActivity : ComponentActivity() {
         val versionName = packageInfo.versionName
 
         // Fetch profile data
-        LaunchedEffect(deviceId) {
+        LaunchedEffect(deviceId, phOrJp) {
             isLoading = true
             errorMessage = null
 
@@ -295,6 +317,11 @@ class PagingActivity : ComponentActivity() {
             editor.putString("phorjp", country)
             editor.apply()
             phOrJp = country
+            (context as? Activity)?.let {
+                it.runOnUiThread {
+                    restartActivity()
+                }
+            }
         }
 
         fun getTranslatedText(englishText: String, japaneseText: String): String {
@@ -353,9 +380,17 @@ class PagingActivity : ComponentActivity() {
                                 } else {
                                     // Show actual profile
                                     val imageUrl = employeeData?.picture?.let { picture ->
-                                        val primaryUrl = "http://192.168.254.163/V4/11-A%20Employee%20List%20V2/profilepictures/$picture"
-                                        val fallbackUrl = "http://126.209.7.246/V4/11-A%20Employee%20List%20V2/profilepictures/$picture"
-                                        rememberUrlWithFallback(primaryUrl, fallbackUrl)
+                                        if (phOrJp == "jp") {
+                                            rememberUrlWithFallback(
+                                                "http://192.168.1.213/V4/11-A%20Employee%20List%20V2/profilepictures/$picture",
+                                                "http://220.157.175.232/V4/11-A%20Employee%20List%20V2/profilepictures/$picture"
+                                            )
+                                        } else {
+                                            rememberUrlWithFallback(
+                                                "http://192.168.254.163/V4/11-A%20Employee%20List%20V2/profilepictures/$picture",
+                                                "http://126.209.7.246/V4/11-A%20Employee%20List%20V2/profilepictures/$picture"
+                                            )
+                                        }
                                     }
 
                                     AsyncImage(
@@ -397,7 +432,7 @@ class PagingActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Rest of the drawer content remains the same...
+                        // Language selection
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -702,7 +737,7 @@ class PagingActivity : ComponentActivity() {
                     var errorLoadingPosts by remember { mutableStateOf<String?>(null) }
 
                     // Fetch paging posts
-                    LaunchedEffect(deviceId) {
+                    LaunchedEffect(deviceId, phOrJp) {
                         isLoadingPosts = true
                         errorLoadingPosts = null
 
@@ -808,7 +843,8 @@ class PagingActivity : ComponentActivity() {
                                                     }
                                                 }
                                             )
-                                        }
+                                        },
+                                        phOrJp = phOrJp
                                     )
                                 }
                             } else {
@@ -848,7 +884,8 @@ class PagingActivity : ComponentActivity() {
                                                         }
                                                     }
                                                 )
-                                            }
+                                            },
+                                            phOrJp = phOrJp
                                         )
                                     }
                                 }

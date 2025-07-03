@@ -19,11 +19,21 @@ interface ApiService {
 
     @GET("V4/Others/Kurt/RingAPI/kurt_fetchProfile.php")
     fun getProfile(@Query("deviceId") deviceId: String): Call<ProfileResponse>
+
+    @GET("V4/Others/Kurt/RingAPI/kurt_fetchPagingPosts.php")
+    fun getPagingPosts(@Query("deviceId") deviceId: String): Call<PagingPostsResponse>
+
     @FormUrlEncoded
     @POST("V4/Others/Kurt/RingAPI/kurt_updateLanguageFlag.php")
     fun updateLanguageFlag(
         @Field("idNumber") idNumber: String,
         @Field("languageFlag") languageFlag: String
     ): Call<BasicResponse>
-}
 
+    @FormUrlEncoded
+    @POST("V4/Others/Kurt/RingAPI/kurt_updatePagingStatus.php")
+    fun updatePagingStatus(
+        @Field("pagingId") pagingId: Int,
+        @Field("idNumber") idNumber: String
+    ): Call<BasicResponse>
+}

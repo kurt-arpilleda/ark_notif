@@ -53,6 +53,11 @@ import java.net.URL
 import kotlinx.coroutines.*
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.Composable
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class PagingActivity : ComponentActivity() {
 
@@ -81,6 +86,111 @@ class PagingActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e("PagingActivity", "Error getting device identifier: ${e.message}", e)
             "unknown-device"
+        }
+    }
+    @Composable
+    fun PagingPostItem(
+        post: PagingPost,
+        imageLoader: ImageLoader,
+        currentLanguage: String,
+        onAcknowledge: (Int) -> Unit
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = MaterialTheme.shapes.medium,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                // Requester profile with date
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    AsyncImage(
+                        model = rememberUrlWithFallback(
+                            "http://192.168.254.163/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}",
+                            "http://126.209.7.246/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}"
+                        ),
+                        contentDescription = if (currentLanguage == "ja") "リクエスト者のプロフィール" else "Requester Profile",
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape),
+                        placeholder = painterResource(id = R.drawable.profile_placeholder),
+                        error = painterResource(id = R.drawable.profile_placeholder),
+                        imageLoader = imageLoader
+                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = "${post.firstName} ${post.surName}",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+
+                        Text(
+                            text = formatDateTime(post.dateTime),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Location text
+                Text(
+                    text = if (currentLanguage == "ja") "行き先: ${post.locationText}" else "Go to: ${post.locationText}",
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Acknowledge button
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Button(
+                        onClick = { onAcknowledge(post.pagingId) },
+                        modifier = Modifier.widthIn(min = 120.dp),
+                        shape = MaterialTheme.shapes.large,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF3452B4),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            text = if (currentLanguage == "ja") "了解" else "On My Way",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun formatDateTime(input: String): String {
+        return try {
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val date = inputFormat.parse(input)
+            val outputFormat = SimpleDateFormat("MMM d, yyyy hh:mm a", Locale.getDefault())
+            outputFormat.format(date ?: input)
+        } catch (e: Exception) {
+            input // fallback to original if parsing fails
         }
     }
 
@@ -581,69 +691,169 @@ class PagingActivity : ComponentActivity() {
                     }
                 }
             ) { paddingValues ->
-                // Content area with translated text
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.TopCenter
                 ) {
+                    var pagingPosts by remember { mutableStateOf<List<PagingPost>>(emptyList()) }
+                    var isLoadingPosts by remember { mutableStateOf(true) }
+                    var errorLoadingPosts by remember { mutableStateOf<String?>(null) }
+
+                    // Fetch paging posts
+                    LaunchedEffect(deviceId) {
+                        isLoadingPosts = true
+                        errorLoadingPosts = null
+
+                        val apiService = if (phOrJp == "jp") {
+                            RetrofitClientJP.instance
+                        } else {
+                            RetrofitClient.instance
+                        }
+
+                        apiService.getPagingPosts(deviceId).enqueue(object : Callback<PagingPostsResponse> {
+                            override fun onResponse(
+                                call: Call<PagingPostsResponse>,
+                                response: Response<PagingPostsResponse>
+                            ) {
+                                isLoadingPosts = false
+                                if (response.isSuccessful && response.body()?.success == true) {
+                                    pagingPosts = response.body()?.posts ?: emptyList()
+                                } else {
+                                    errorLoadingPosts = response.body()?.error ?: "Failed to load paging posts"
+                                }
+                            }
+
+                            override fun onFailure(call: Call<PagingPostsResponse>, t: Throwable) {
+                                isLoadingPosts = false
+                                errorLoadingPosts = t.message ?: "Network error occurred"
+                            }
+                        })
+                    }
+
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
-                        Text(
-                            text = getTranslatedText("Paging Content Area", "ページングコンテンツエリア"),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.Gray
-                        )
+                        if (isLoadingPosts) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        } else if (errorLoadingPosts != null) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = getTranslatedText(
+                                        "Error loading paging posts: $errorLoadingPosts",
+                                        "ページング投稿の読み込みエラー: $errorLoadingPosts"
+                                    ),
+                                    color = Color.Red
+                                )
+                            }
+                        } else if (pagingPosts.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = getTranslatedText(
+                                        "No active paging notifications",
+                                        "アクティブなページング通知はありません"
+                                    ),
+                                    color = Color.Gray
+                                )
+                            }
+                        } else {
+                            // CENTER THE SINGLE ITEM, NORMAL LIST FOR MULTIPLE ITEMS
+                            if (pagingPosts.size == 1) {
+                                // Single item - center it vertically
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    PagingPostItem(
+                                        post = pagingPosts[0],
+                                        imageLoader = imageLoader,
+                                        currentLanguage = currentLanguage,
+                                        onAcknowledge = { pagingId ->
+                                            val apiService = if (phOrJp == "jp") {
+                                                RetrofitClientJP.instance
+                                            } else {
+                                                RetrofitClient.instance
+                                            }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                                            apiService.updatePagingStatus(pagingId, employeeData?.idNumber ?: "").enqueue(
+                                                object : Callback<BasicResponse> {
+                                                    override fun onResponse(
+                                                        call: Call<BasicResponse>,
+                                                        response: Response<BasicResponse>
+                                                    ) {
+                                                        if (!response.isSuccessful || response.body()?.success != true) {
+                                                            Log.e("PagingActivity", "Failed to update paging status")
+                                                        } else {
+                                                            // Refresh posts after acknowledging
+                                                            pagingPosts = pagingPosts.filter { it.pagingId != pagingId }
+                                                        }
+                                                    }
 
-                        Text(
-                            text = getTranslatedText(
-                                "Current Language: ${if (currentLanguage == "en") "English" else "Japanese"}",
-                                "現在の言語: ${if (currentLanguage == "en") "英語" else "日本語"}"
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
+                                                    override fun onFailure(call: Call<BasicResponse>, t: Throwable) {
+                                                        Log.e("PagingActivity", "Network error updating paging status", t)
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    )
+                                }
+                            } else {
+                                // Multiple items - show as normal list
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    items(pagingPosts) { post ->
+                                        PagingPostItem(
+                                            post = post,
+                                            imageLoader = imageLoader,
+                                            currentLanguage = currentLanguage,
+                                            onAcknowledge = { pagingId ->
+                                                val apiService = if (phOrJp == "jp") {
+                                                    RetrofitClientJP.instance
+                                                } else {
+                                                    RetrofitClient.instance
+                                                }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                                                apiService.updatePagingStatus(pagingId, employeeData?.idNumber ?: "").enqueue(
+                                                    object : Callback<BasicResponse> {
+                                                        override fun onResponse(
+                                                            call: Call<BasicResponse>,
+                                                            response: Response<BasicResponse>
+                                                        ) {
+                                                            if (!response.isSuccessful || response.body()?.success != true) {
+                                                                Log.e("PagingActivity", "Failed to update paging status")
+                                                            } else {
+                                                                // Refresh posts after acknowledging
+                                                                pagingPosts = pagingPosts.filter { it.pagingId != pagingId }
+                                                            }
+                                                        }
 
-                        Text(
-                            text = getTranslatedText(
-                                "Country: ${if (phOrJp == "ph") "Philippines" else "Japan"}",
-                                "国: ${if (phOrJp == "ph") "フィリピン" else "日本"}"
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Additional info showing flag selection
-                        Text(
-                            text = getTranslatedText(
-                                "Current Flag: ${if (phOrJp == "ph") "🇵🇭 Philippines" else "🇯🇵 Japan"}",
-                                "現在の国旗: ${if (phOrJp == "ph") "🇵🇭 フィリピン" else "🇯🇵 日本"}"
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = getTranslatedText(
-                                "Tap the flag in the header to switch countries",
-                                "ヘッダーの国旗をタップして国を切り替えます"
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 32.dp)
-                        )
+                                                        override fun onFailure(call: Call<BasicResponse>, t: Throwable) {
+                                                            Log.e("PagingActivity", "Network error updating paging status", t)
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -46,3 +46,19 @@ data class BasicResponse(
     val success: Boolean,
     val error: String?
 )
+data class PagingPost(
+    val pagingId: Int,
+    val requestPerson: String,
+    val firstName: String,
+    val surName: String,
+    val picture: String?,
+    val location: Int,
+    val locationText: String,
+    val dateTime: String
+)
+
+data class PagingPostsResponse(
+    val success: Boolean,
+    val error: String? = null,
+    val posts: List<PagingPost> = emptyList()
+)

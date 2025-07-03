@@ -830,12 +830,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val (title, statusText, toggleText) = if (isJapanese) {
             when (notificationType) {
                 "NG" -> Triple(
-                    "NG Report",
+                    "NGレポート",
                     "🔊 鳴っています - タップして表示",
                     if (isMonitoring) "監視を停止" else "監視を開始"
                 )
                 "PAGING" -> Triple(
-                    "You are being Paged",
+                    "注意：呼び出されています！",
                     "🔊 鳴っています - タップして表示",
                     if (isMonitoring) "監視を停止" else "監視を開始"
                 )
@@ -857,7 +857,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
                 )
                 "PAGING" -> Triple(
-                    "You are being Paged",
+                    "Attention: You’re being paged!",
                     "🔊 RINGING - Tap to view",
                     if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
                 )

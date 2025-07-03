@@ -812,12 +812,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             "NG" -> packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
-            "PAGING" -> Intent(this, MainActivity::class.java).apply {
+            "PAGING" -> Intent(this, PagingActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
-            else -> packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
+            else -> Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            } ?: Intent(this, MainActivity::class.java)
+            }
         }
 
         val contentPendingIntent = PendingIntent.getActivity(

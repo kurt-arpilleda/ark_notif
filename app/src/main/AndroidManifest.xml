@@ -42,9 +42,8 @@
         tools:targetApi="34">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".PagingActivity"
             android:exported="true"
-            android:screenOrientation="portrait"
             android:label="@string/app_name"
             android:theme="@style/Theme.Ark_notif">
             <intent-filter>
@@ -52,7 +51,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
+        <activity
+            android:name=".MainActivity"
+            android:label="Paging Notif"
+            android:exported="true"
+            />
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

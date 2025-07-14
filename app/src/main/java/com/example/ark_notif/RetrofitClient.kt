@@ -16,24 +16,20 @@ object RetrofitClient {
     const val FALLBACK_URL = "http://126.209.7.246/"
     private const val MAX_RETRIES = 3
     private const val RETRY_DELAY_MS = 500L
-    private const val CONNECTION_TIMEOUT_SECONDS = 2L
+    private const val CONNECTION_TIMEOUT_SECONDS = 4L
     private const val READ_WRITE_TIMEOUT_SECONDS = 10L
 
-    // Track which URL was most recently successful
     private val currentBaseUrl = AtomicReference<String>(PRIMARY_URL)
 
-    // Thread pool for parallel URL checks
     private val executor = Executors.newCachedThreadPool()
 
-    // Configuring the logging interceptor
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.NONE
     }
 
-    // Create an OkHttpClient with optimized settings
     private val client = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
-        .addInterceptor(SmartUrlInterceptor()) // Our improved interceptor
+        .addInterceptor(SmartUrlInterceptor())
         .connectTimeout(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .writeTimeout(READ_WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(READ_WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -41,7 +37,6 @@ object RetrofitClient {
         .connectionPool(ConnectionPool(5, 1, TimeUnit.MINUTES))
         .build()
 
-    // Retrofit instance with optimized settings
     val instance: ApiService by lazy {
         val gson = GsonBuilder()
             .setLenient()
@@ -49,7 +44,6 @@ object RetrofitClient {
         createRetrofitInstance(currentBaseUrl.get(), gson)
     }
 
-    // Create Retrofit instance based on baseUrl
     private fun createRetrofitInstance(baseUrl: String, gson: com.google.gson.Gson): ApiService {
         return Retrofit.Builder()
             .baseUrl(baseUrl)
@@ -59,7 +53,6 @@ object RetrofitClient {
             .create(ApiService::class.java)
     }
 
-    // This method will check both URLs in parallel and pick the fastest reachable
     fun updateWorkingUrl() {
         executor.submit {
             val completionService = ExecutorCompletionService<Pair<String, Boolean>>(executor)
@@ -73,18 +66,15 @@ object RetrofitClient {
             }
 
             repeat(urls.size) {
-                val future = completionService.take() // blocks until a task completes
+                val future = completionService.take()
                 val (url, reachable) = future.get()
                 if (reachable) {
                     currentBaseUrl.set(url)
                     return@submit
                 }
             }
-            // If neither reachable, do nothing or keep old
         }
     }
-
-    // Check if a URL is reachable via TCP connection
     private fun isUrlReachable(url: String): Boolean {
         return try {
             val host = url.substringAfter("://").substringBefore("/")
@@ -98,12 +88,10 @@ object RetrofitClient {
         }
     }
 
-    // Call this method on network change or app startup to update URL
     fun onNetworkConnectivityChanged() {
         updateWorkingUrl()
     }
 
-    // Smart interceptor that tries the preferred URL first, then fallback
     class SmartUrlInterceptor : Interceptor {
         @Throws(IOException::class)
         override fun intercept(chain: Interceptor.Chain): Response {
@@ -153,7 +141,6 @@ object RetrofitClient {
         }
     }
 
-    // Switch to alternate URL on failure and re-check
     fun handleConnectionFailure() {
         val current = currentBaseUrl.get()
         val alternate = if (current == PRIMARY_URL) FALLBACK_URL else PRIMARY_URL

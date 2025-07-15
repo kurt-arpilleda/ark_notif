@@ -62,3 +62,7 @@ data class PagingPostsResponse(
     val error: String? = null,
     val posts: List<PagingPost> = emptyList()
 )
+data class RingtoneInfo(
+    val name: String,
+    val uri: String
+)

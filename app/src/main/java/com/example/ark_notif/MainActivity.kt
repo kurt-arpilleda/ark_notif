@@ -1575,7 +1575,8 @@ class MainActivity : ComponentActivity() {
 
         fun playRingtone(uri: String) {
             currentPlayingRingtone?.stop()
-            val ringtone = RingtoneManager.getRingtone(context, Uri.parse(uri))
+            val ringtoneUri = Uri.parse(uri)
+            val ringtone = RingtoneManager.getRingtone(context, ringtoneUri)
             ringtone.streamType = AudioManager.STREAM_ALARM
             ringtone.play()
             currentPlayingRingtone = ringtone
@@ -1742,22 +1743,13 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    // Helper data class and functions
-    data class RingtoneInfo(
-        val name: String,
-        val uri: String
-    )
-
-
-    // Replace your existing getRingtones method with this updated version
     fun getRingtones(context: Context): List<RingtoneInfo> {
         val ringtones = mutableListOf<RingtoneInfo>()
 
-        // Add custom ringtones first
         ringtones.addAll(getCustomRingtones(context))
 
-        // Add system ringtones
+        ringtones.addAll(getRawResourceRingtones(context))
+
         val ringtoneManager = RingtoneManager(context)
         ringtoneManager.setType(RingtoneManager.TYPE_ALARM)
 
@@ -1768,6 +1760,23 @@ class MainActivity : ComponentActivity() {
             ringtones.add(RingtoneInfo(title, uri))
         }
         cursor.close()
+
+        return ringtones
+    }
+
+    private fun getRawResourceRingtones(context: Context): List<RingtoneInfo> {
+        val ringtones = mutableListOf<RingtoneInfo>()
+
+        val rawRingtones = mapOf(
+            R.raw.office to "Office Ring",
+            R.raw.japan_eas to "Japan EAS",
+            R.raw.usa_eas_alarm to "USA EAS",
+        )
+
+        rawRingtones.forEach { (resId, name) ->
+            val uri = Uri.parse("android.resource://${context.packageName}/$resId").toString()
+            ringtones.add(RingtoneInfo(name, uri))
+        }
 
         return ringtones
     }

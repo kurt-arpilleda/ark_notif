@@ -16,7 +16,7 @@ object RetrofitClientJP {
     const val FALLBACK_URL = "http://220.157.175.232/"
     private const val MAX_RETRIES = 3
     private const val RETRY_DELAY_MS = 500L
-    private const val CONNECTION_TIMEOUT_SECONDS = 4L
+    private const val CONNECTION_TIMEOUT_SECONDS = 2L
     private const val READ_WRITE_TIMEOUT_SECONDS = 10L
 
     private val currentBaseUrl = AtomicReference<String>(PRIMARY_URL)

@@ -169,7 +169,6 @@ class MainActivity : ComponentActivity() {
         try {
             val inputStream: InputStream? = contentResolver.openInputStream(uri)
             inputStream?.let { stream ->
-                // Get original filename
                 val originalName = getFileNameFromUri(uri) ?: "custom_ringtone"
                 val fileName = if (originalName.contains('.')) {
                     originalName
@@ -177,25 +176,20 @@ class MainActivity : ComponentActivity() {
                     "$originalName.mp3"
                 }
 
-                // Create ringtones directory if it doesn't exist
                 val ringtonesDir = File(filesDir, "ringtones")
                 if (!ringtonesDir.exists()) {
                     ringtonesDir.mkdirs()
                 }
 
-                // Create the file
                 val file = File(ringtonesDir, fileName)
                 val outputStream = FileOutputStream(file)
 
-                // Copy the file
                 stream.copyTo(outputStream)
                 stream.close()
                 outputStream.close()
 
-                // Add to media store as alarm ringtone
                 addToMediaStore(file, true)
 
-                // Refresh media store to make it appear immediately
                 sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)))
 
                 Toast.makeText(this, "Alarm ringtone added successfully", Toast.LENGTH_SHORT).show()
@@ -350,6 +344,7 @@ class MainActivity : ComponentActivity() {
         val prefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         val deviceId = remember { retrieveDeviceId() }
         var showInstruction by remember { mutableStateOf(true) }
+        var loadingCountry by remember { mutableStateOf<String?>(null) }
 
         var currentLanguage by remember {
             mutableStateOf(
@@ -446,6 +441,8 @@ class MainActivity : ComponentActivity() {
         }
 
         fun updateCountryPreference(country: String) {
+            loadingCountry = country
+
             val apiService = if (country == "jp") {
                 RetrofitClientJP.instance
             } else {
@@ -454,6 +451,7 @@ class MainActivity : ComponentActivity() {
 
             apiService.getProfile(deviceId).enqueue(object : Callback<ProfileResponse> {
                 override fun onResponse(call: Call<ProfileResponse>, response: Response<ProfileResponse>) {
+                    loadingCountry = null
                     if (response.isSuccessful && response.body()?.success == true) {
                         prefs.edit { putString("phorjp", country) }
                         restartActivity()
@@ -476,6 +474,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 override fun onFailure(call: Call<ProfileResponse>, t: Throwable) {
+                    loadingCountry = null
                     val message = if (currentLanguage == "ja") {
                         "ネットワークエラーが発生しました"
                     } else {
@@ -737,29 +736,38 @@ class MainActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clickable {
+                                    .clickable(enabled = loadingCountry == null) {
                                         if (countryCode != "ph") {
                                             updateCountryPreference("ph")
                                         }
-                                    }
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Image(
-                                    painter = rememberAsyncImagePainter(
-                                        R.drawable.philippinesflag,
-                                        imageLoader = imageLoader
-                                    ),
-                                    contentDescription = getTranslatedText("Philippines", "フィリピン"),
-                                    modifier = Modifier.fillMaxSize()
-                                )
-
-                                if (countryCode == "ph") {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .width(40.dp)
-                                            .height(2.dp)
-                                            .background(Color.Blue)
+                                if (loadingCountry == "ph") {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.Blue,
+                                        strokeWidth = 2.dp
                                     )
+                                } else {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(
+                                            R.drawable.philippinesflag,
+                                            imageLoader = imageLoader
+                                        ),
+                                        contentDescription = getTranslatedText("Philippines", "フィリピン"),
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+
+                                    if (countryCode == "ph") {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .width(40.dp)
+                                                .height(2.dp)
+                                                .background(Color.Blue)
+                                        )
+                                    }
                                 }
                             }
 
@@ -767,29 +775,38 @@ class MainActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clickable {
+                                    .clickable(enabled = loadingCountry == null) {
                                         if (countryCode != "jp") {
                                             updateCountryPreference("jp")
                                         }
-                                    }
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Image(
-                                    painter = rememberAsyncImagePainter(
-                                        R.drawable.japanflag,
-                                        imageLoader = imageLoader
-                                    ),
-                                    contentDescription = getTranslatedText("Japan", "日本"),
-                                    modifier = Modifier.fillMaxSize()
-                                )
-
-                                if (countryCode == "jp") {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .width(40.dp)
-                                            .height(2.dp)
-                                            .background(Color.Blue)
+                                if (loadingCountry == "jp") {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.Blue,
+                                        strokeWidth = 2.dp
                                     )
+                                } else {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(
+                                            R.drawable.japanflag,
+                                            imageLoader = imageLoader
+                                        ),
+                                        contentDescription = getTranslatedText("Japan", "日本"),
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+
+                                    if (countryCode == "jp") {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .width(40.dp)
+                                                .height(2.dp)
+                                                .background(Color.Blue)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -864,10 +881,6 @@ class MainActivity : ComponentActivity() {
                                             getTranslatedText("Japan Flag", "日本国旗"),
                                         modifier = Modifier
                                             .size(40.dp)
-                                            .clickable {
-                                                val newCountry = if (countryCode == "ph") "jp" else "ph"
-                                                updateCountryPreference(newCountry)
-                                            }
                                     )
 
                                     Spacer(modifier = Modifier.width(5.dp))
@@ -1613,6 +1626,7 @@ class MainActivity : ComponentActivity() {
                         IconButton(
                             onClick = {
                                 (context as MainActivity).selectAudioLauncher.launch("audio/*")
+                                refreshRingtones()
                             }
                         ) {
                             Icon(

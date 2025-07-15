@@ -16,7 +16,7 @@ object RetrofitClient {
     const val FALLBACK_URL = "http://126.209.7.246/"
     private const val MAX_RETRIES = 3
     private const val RETRY_DELAY_MS = 500L
-    private const val CONNECTION_TIMEOUT_SECONDS = 4L
+    private const val CONNECTION_TIMEOUT_SECONDS = 2L
     private const val READ_WRITE_TIMEOUT_SECONDS = 10L
 
     private val currentBaseUrl = AtomicReference<String>(PRIMARY_URL)
@@ -24,7 +24,7 @@ object RetrofitClient {
     private val executor = Executors.newCachedThreadPool()
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BASIC
+        level = HttpLoggingInterceptor.Level.NONE
     }
 
     private val client = OkHttpClient.Builder()

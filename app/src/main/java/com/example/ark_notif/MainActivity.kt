@@ -103,7 +103,7 @@ import java.net.URL
 class MainActivity : ComponentActivity() {
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
     private lateinit var appUpdateService: AppUpdateService
-    private lateinit var connectivityReceiver: NetworkUtils.ConnectivityReceiver
+    private var connectivityReceiver: NetworkUtils.ConnectivityReceiver? = null
     private lateinit var ringMonitoringManager: RingMonitoringManager
 
     companion object {
@@ -774,8 +774,6 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     RingStatusView(countryCode)
 
-                                    Spacer(modifier = Modifier.height(32.dp))
-
                                     MonitoringControls()
 
                                     Spacer(modifier = Modifier.height(16.dp))
@@ -809,13 +807,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun registerReceiver() {
+        connectivityReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (e: IllegalArgumentException) {
+                // Receiver was not registered, ignore
+            }
+        }
+
         connectivityReceiver = NetworkUtils.ConnectivityReceiver {
             checkForUpdates()
         }
         val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
         registerReceiver(connectivityReceiver, filter)
     }
-
     private fun checkForUpdates() {
         coroutineScope.launch {
             if (NetworkUtils.isNetworkAvailable(this@MainActivity)) {
@@ -935,13 +940,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            unregisterReceiver(connectivityReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Receiver was not registered, ignore
+        connectivityReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (e: IllegalArgumentException) {
+                // Receiver was not registered, ignore
+            }
         }
     }
-
     @Composable
     private fun MonitoringControls() {
         var isMonitoring by remember { mutableStateOf(false) }
@@ -1107,52 +1113,12 @@ class MainActivity : ComponentActivity() {
         val prefs = remember { context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE) }
         var currentCountry by remember { mutableStateOf(countryCode) }
 
-        val iconRes = when (currentCountry) {
-            "ph" -> R.drawable.philippinesflag
-            "jp" -> R.drawable.japan
-            else -> R.drawable.ic_ring_active
-        }
-
-        val title = getTranslatedText(
-            "Ring Alert Monitoring Service (Arktech Philippines)",
-            "着信アラート監視サービス (Arktech Japan)"
-        )
-
-
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                painter = painterResource(id = iconRes),
-                contentDescription = getTranslatedText(
-                    "Monitoring Status",
-                    "監視ステータス"
-                ),
-                tint = Color.Unspecified,
-                modifier = Modifier
-                    .size(120.dp)
-                    .clickable {
-                        currentCountry = if (currentCountry == "ph") "jp" else "ph"
-                        prefs.edit { putString("phorjp", currentCountry) }
-                    }
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = title,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
-            }
+            // Empty column since we removed the flag and title
         }
     }
 }

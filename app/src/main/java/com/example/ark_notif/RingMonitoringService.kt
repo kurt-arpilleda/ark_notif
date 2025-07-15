@@ -705,7 +705,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         isRinging = true
         sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
-        val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
 
         ringtoneJob?.cancel()
 
@@ -726,7 +726,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     RingtoneManager.getRingtone(this@RingMonitoringService, alarmUri).apply {
                         setAudioAttributes(
                             AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                .setUsage(AudioAttributes.USAGE_ALARM) // Already set to ALARM (correct)
                                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                                 .build()
                         )
@@ -746,7 +746,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         }
                     }
                 }
-
             } catch (e: CancellationException) {
                 currentRingtone?.stop()
                 vibrator?.cancel()

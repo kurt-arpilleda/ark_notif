@@ -211,6 +211,15 @@ class MainActivity : ComponentActivity() {
             false
         }
     }
+    @Composable
+    fun getTranslatedText(englishText: String, japaneseText: String): String {
+        val context = LocalContext.current
+        val currentLanguage = remember {
+            context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+                .getString("languageFlag", "en") ?: "en"
+        }
+        return if (currentLanguage == "ja") japaneseText else englishText
+    }
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun MainAppContent(countryCode: String) {
@@ -367,12 +376,10 @@ class MainActivity : ComponentActivity() {
             else -> R.drawable.ic_ring_active
         }
 
-        val title = when (countryCode) {
-            "ph" -> "Ring Alert Monitoring Service"
-            "jp" -> "着信アラート監視サービス"
-            else -> "Ring Alert Monitoring Service"
-        }
-
+        val title = getTranslatedText(
+            "Notification Service",
+            "通知サービス"
+        )
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -704,9 +711,7 @@ class MainActivity : ComponentActivity() {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(end = 30.dp)
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Image(
                                         painter = rememberAsyncImagePainter(
@@ -725,12 +730,12 @@ class MainActivity : ComponentActivity() {
                                             }
                                     )
 
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(modifier = Modifier.width(5.dp))
 
                                     Text(
                                         text = title,
                                         style = MaterialTheme.typography.titleMedium.copy(
-                                            fontSize = 30.sp,
+                                            fontSize = 27.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color.White
                                         )
@@ -1047,7 +1052,10 @@ class MainActivity : ComponentActivity() {
             onDismissRequest = {},
             title = {
                 Text(
-                    text = "Important Setup / 重要な設定",
+                    text = getTranslatedText(
+                        "Important Setup",
+                        "重要な設定"
+                    ),
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp,
                     color = MaterialTheme.colorScheme.onSurface
@@ -1056,15 +1064,18 @@ class MainActivity : ComponentActivity() {
             text = {
                 Column {
                     Text(
-                        text = """
-        Please do the following in your device settings:
-        - Enable Auto Start or App Launch for this app.
-        - Disable or do not restrict this app in the power saving management.
-
-        次の設定を端末の設定画面で行ってください:
-        - このアプリの自動起動（またはアプリ起動）を有効にしてください。
-        - 電池節約機能でこのアプリを制限しないでください。
-    """.trimIndent(),
+                        text = getTranslatedText(
+                            """
+                        Please do the following in your device settings:
+                        - Enable Auto Start or App Launch for this app.
+                        - Disable or do not restrict this app in the power saving management.
+                        """.trimIndent(),
+                            """
+                        次の設定を端末の設定画面で行ってください:
+                        - このアプリの自動起動（またはアプリ起動）を有効にしてください。
+                        - 電池節約機能でこのアプリを制限しないでください。
+                        """.trimIndent()
+                        ),
                         fontSize = 16.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -1078,7 +1089,7 @@ class MainActivity : ComponentActivity() {
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) {
-                    Text("OK")
+                    Text(getTranslatedText("OK", "了解"))
                 }
             },
             containerColor = MaterialTheme.colorScheme.surface,
@@ -1102,11 +1113,11 @@ class MainActivity : ComponentActivity() {
             else -> R.drawable.ic_ring_active
         }
 
-        val title = when (currentCountry) {
-            "ph" -> "Ring Alert Monitoring Service (Arktech Philippines)"
-            "jp" -> "着信アラート監視サービス (Arktech Japan)"
-            else -> "Ring Alert Monitoring Service"
-        }
+        val title = getTranslatedText(
+            "Ring Alert Monitoring Service (Arktech Philippines)",
+            "着信アラート監視サービス (Arktech Japan)"
+        )
+
 
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -1115,7 +1126,10 @@ class MainActivity : ComponentActivity() {
         ) {
             Icon(
                 painter = painterResource(id = iconRes),
-                contentDescription = "Monitoring Status",
+                contentDescription = getTranslatedText(
+                    "Monitoring Status",
+                    "監視ステータス"
+                ),
                 tint = Color.Unspecified,
                 modifier = Modifier
                     .size(120.dp)

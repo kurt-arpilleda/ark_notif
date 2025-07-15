@@ -1557,16 +1557,17 @@ class MainActivity : ComponentActivity() {
         onDismiss: () -> Unit,
         countryCode: String,
     ) {
-        val ringtones = remember { getRingtones(context) }
-        var selectedRingtone by remember { mutableStateOf(currentRingtone) }
-        var selectedRingtoneName by remember {
-            mutableStateOf(getRingtoneName(context, currentRingtone))
-        }
-        val allRingtones = remember { getRingtones(context) }
+        // Change to mutableStateList to track changes
+        var allRingtones by remember { mutableStateOf(getRingtones(context)) }
         val alarmRingtones = remember { allRingtones.filter { isAlarmRingtone(context, Uri.parse(it.uri)) } }
         val otherRingtones = remember { allRingtones.filterNot { isAlarmRingtone(context, Uri.parse(it.uri)) } }
+        var selectedRingtone by remember { mutableStateOf(currentRingtone) }
+        var selectedRingtoneName by remember { mutableStateOf(getRingtoneName(context, currentRingtone)) }
         var currentPlayingRingtone by remember { mutableStateOf<Ringtone?>(null) }
-        val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+
+        fun refreshRingtones() {
+            allRingtones = getRingtones(context)
+        }
 
         fun getTranslatedText(englishText: String, japaneseText: String): String {
             return if (currentLanguage == "ja") japaneseText else englishText
@@ -1609,7 +1610,6 @@ class MainActivity : ComponentActivity() {
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
-                        // Add Custom Ringtone Button
                         IconButton(
                             onClick = {
                                 (context as MainActivity).selectAudioLauncher.launch("audio/*")
@@ -1628,24 +1628,26 @@ class MainActivity : ComponentActivity() {
                     LazyColumn(
                         modifier = Modifier.weight(1f)
                     ) {
-                        item {
-                            Text(
-                                text = getTranslatedText("Your sounds", "自分のサウンド"),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(16.dp, 8.dp)
-                            )
-                        }
+                        if (otherRingtones.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = getTranslatedText("Your sounds", "自分のサウンド"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(16.dp, 8.dp)
+                                )
+                            }
 
-                        items(otherRingtones) { ringtone ->
-                            RingtoneItem(
-                                ringtone = ringtone,
-                                isSelected = ringtone.uri == selectedRingtone,
-                                onClick = {
-                                    selectedRingtone = ringtone.uri
-                                    selectedRingtoneName = ringtone.name
-                                    playRingtone(ringtone.uri)
-                                }
-                            )
+                            items(otherRingtones) { ringtone ->
+                                RingtoneItem(
+                                    ringtone = ringtone,
+                                    isSelected = ringtone.uri == selectedRingtone,
+                                    onClick = {
+                                        selectedRingtone = ringtone.uri
+                                        selectedRingtoneName = ringtone.name
+                                        playRingtone(ringtone.uri)
+                                    }
+                                )
+                            }
                         }
 
                         item {
@@ -1668,7 +1670,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-
 
                     Spacer(modifier = Modifier.height(16.dp))
 

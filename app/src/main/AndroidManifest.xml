@@ -48,6 +48,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:label="@string/app_name"
             android:theme="@style/Theme.Ark_notif">
             <intent-filter>
@@ -58,6 +59,7 @@
         <activity
             android:name=".PagingActivity"
             android:label="Paging Notif"
+            android:screenOrientation="portrait"
             android:exported="true"
             />
         <receiver

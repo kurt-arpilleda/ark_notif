@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.ConnectivityManager
 import android.net.Uri
@@ -803,23 +804,6 @@ class MainActivity : ComponentActivity() {
                                     verticalArrangement = Arrangement.Center
                                 ) {
                                     RingStatusView(countryCode)
-
-                                    MonitoringControls()
-
-                                    Spacer(modifier = Modifier.height(16.dp))
-
-                                    Button(
-                                        onClick = { openBatteryOptimizationSettings() },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.primary,
-                                            contentColor = MaterialTheme.colorScheme.onPrimary
-                                        )
-                                    ) {
-                                        Text(getTranslatedText(
-                                            "Open Battery Optimization Settings",
-                                            "バッテリー最適化設定を開く"
-                                        ))
-                                    }
                                 }
                             }
                         }
@@ -979,61 +963,6 @@ class MainActivity : ComponentActivity() {
         }
     }
     @Composable
-    private fun MonitoringControls() {
-        var isMonitoring by remember { mutableStateOf(false) }
-        val context = LocalContext.current
-        val currentLanguage = remember {
-            context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-                .getString("languageFlag", "en") ?: "en"
-        }
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Button(
-                onClick = {
-                    if (isMonitoring) {
-                        ringMonitoringManager.stopMonitoring()
-                        Toast.makeText(
-                            this@MainActivity,
-                            if (currentLanguage == "ja") "監視を停止しました" else "Monitoring stopped",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        ringMonitoringManager.startMonitoring()
-                        Toast.makeText(
-                            this@MainActivity,
-                            if (currentLanguage == "ja") "監視を開始しました" else "Monitoring started",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                    isMonitoring = !isMonitoring
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            ) {
-                Text(if (isMonitoring) {
-                    if (currentLanguage == "ja") "監視を停止" else "Stop Monitoring"
-                } else {
-                    if (currentLanguage == "ja") "監視を開始" else "Start Monitoring"
-                })
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = if (isMonitoring) {
-                    if (currentLanguage == "ja") "ステータス: アクティブ" else "Status: Active"
-                } else {
-                    if (currentLanguage == "ja") "ステータス: 非アクティブ" else "Status: Inactive"
-                },
-                fontSize = 16.sp,
-                color = if (isMonitoring) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-            )
-        }
-    }
-
-    @Composable
     fun CountrySelectionDialog(onCountrySelected: (String) -> Unit) {
         AlertDialog(
             onDismissRequest = {},
@@ -1191,7 +1120,7 @@ class MainActivity : ComponentActivity() {
 
             // Current Volume Level Text
             Text(
-                text = getTranslatedText("Alarm Volume", "アラーム音量"),
+                text = getTranslatedText("Volume", "音量"),
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Bold
                 ),
@@ -1224,7 +1153,7 @@ class MainActivity : ComponentActivity() {
 
             // Ringtone Selection
             Text(
-                text = getTranslatedText("Alarm Ringtone", "アラーム着信音"),
+                text = getTranslatedText("Ringtone", "着信音"),
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold
                 ),
@@ -1444,16 +1373,33 @@ class MainActivity : ComponentActivity() {
             context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
                 .getString("languageFlag", "en") ?: "en"
         }
+        var selectedRingtone by remember { mutableStateOf(currentRingtone) }
+        var selectedRingtoneName by remember {
+            mutableStateOf(getRingtoneName(context, currentRingtone))
+        }
+        var currentPlayingRingtone by remember { mutableStateOf<Ringtone?>(null) }
+        val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
         fun getTranslatedText(englishText: String, japaneseText: String): String {
             return if (currentLanguage == "ja") japaneseText else englishText
         }
 
-        Dialog(onDismissRequest = onDismiss) {
+        fun playRingtone(uri: String) {
+            currentPlayingRingtone?.stop()
+            val ringtone = RingtoneManager.getRingtone(context, Uri.parse(uri))
+            ringtone.streamType = AudioManager.STREAM_ALARM // Set to use alarm volume
+            ringtone.play()
+            currentPlayingRingtone = ringtone
+        }
+
+        Dialog(onDismissRequest = {
+            currentPlayingRingtone?.stop()
+            onDismiss()
+        }) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(400.dp)
+                    .height(700.dp)  // Changed from 400.dp to 600.dp to make it longer
                     .padding(16.dp),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -1463,7 +1409,7 @@ class MainActivity : ComponentActivity() {
                         .padding(16.dp)
                 ) {
                     Text(
-                        text = getTranslatedText("Select Alarm Ringtone", "アラーム着信音を選択"),
+                        text = getTranslatedText("Select Ringtone", "着信音を選択"),
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontWeight = FontWeight.Bold
                         ),
@@ -1478,9 +1424,11 @@ class MainActivity : ComponentActivity() {
                         items(ringtones) { ringtone ->
                             RingtoneItem(
                                 ringtone = ringtone,
-                                isSelected = ringtone.uri == currentRingtone,
+                                isSelected = ringtone.uri == selectedRingtone,
                                 onClick = {
-                                    onRingtoneSelected(ringtone.uri, ringtone.name)
+                                    selectedRingtone = ringtone.uri
+                                    selectedRingtoneName = ringtone.name
+                                    playRingtone(ringtone.uri)
                                 }
                             )
                         }
@@ -1490,10 +1438,21 @@ class MainActivity : ComponentActivity() {
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        TextButton(onClick = onDismiss) {
+                        TextButton(onClick = {
+                            currentPlayingRingtone?.stop()
+                            onDismiss()
+                        }) {
                             Text(getTranslatedText("Cancel", "キャンセル"))
+                        }
+
+                        Button(onClick = {
+                            currentPlayingRingtone?.stop()
+                            onRingtoneSelected(selectedRingtone, selectedRingtoneName)
+                            onDismiss()
+                        }) {
+                            Text(getTranslatedText("Select", "選択"))
                         }
                     }
                 }

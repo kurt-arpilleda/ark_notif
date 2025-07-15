@@ -706,18 +706,14 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         isRinging = true
         sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
 
-        // Get the custom ringtone URI from SharedPreferences
-        val ringtoneUri = sharedPreferences.getString("selected_ringtone_uri", null)?.let { Uri.parse(it) }
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-
         ringtoneJob?.cancel()
 
         ringtoneJob = serviceScope.launch {
             try {
                 stopSilentAudio()
 
+                // Setup vibration pattern
                 val pattern = longArrayOf(0, 1000, 1000)
-
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
                 } else {
@@ -725,8 +721,23 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     vibrator?.vibrate(pattern, 0)
                 }
 
+                // Prepare ringtone URI (fallback to default alarm ringtone if null or invalid)
+                val ringtoneUri = try {
+                    sharedPreferences.getString("selected_ringtone_uri", null)?.let { uriString ->
+                        Uri.parse(uriString)
+                    }?.takeIf { uri ->
+                        // Check if the URI is valid and playable
+                        val ringtone = RingtoneManager.getRingtone(this@RingMonitoringService, uri)
+                        ringtone != null
+                    } ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                } catch (e: Exception) {
+                    Log.e("RingMonitoringService", "Invalid ringtone URI, using default", e)
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                }
+
+                // Load and configure the ringtone
                 currentRingtone = withContext(Dispatchers.IO) {
-                    RingtoneManager.getRingtone(this@RingMonitoringService, ringtoneUri).apply {
+                    RingtoneManager.getRingtone(this@RingMonitoringService, ringtoneUri)?.apply {
                         setAudioAttributes(
                             AudioAttributes.Builder()
                                 .setUsage(AudioAttributes.USAGE_ALARM)
@@ -736,6 +747,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     }
                 }
 
+                // Continuously play ringtone if not already playing
                 while (isActive && isRinging) {
                     try {
                         if (currentRingtone?.isPlaying != true) {
@@ -769,6 +781,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         updateNotification()
     }
+
     private fun stopRinging() {
         if (!isRinging) return
 

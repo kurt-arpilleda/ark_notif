@@ -121,6 +121,13 @@ import retrofit2.Response
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.math.roundToInt
+import android.content.ContentValues
+import android.database.Cursor
+import android.provider.MediaStore
+import androidx.compose.material.icons.filled.Add
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 
 class MainActivity : ComponentActivity() {
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
@@ -132,8 +139,91 @@ class MainActivity : ComponentActivity() {
         private const val REQUEST_OVERLAY_PERMISSION = 101
         private const val REQUEST_BATTERY_OPTIMIZATION = 102
         private const val REQUEST_UNKNOWN_APP_SOURCES = 103
+        private const val RINGTONE_PREF_KEY = "selected_ringtone_uri"
+        private const val RINGTONE_NAME_PREF_KEY = "selected_ringtone_name"
+    }
+    private fun saveSelectedRingtone(uri: String, name: String) {
+        getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit {
+            putString(RINGTONE_PREF_KEY, uri)
+            putString(RINGTONE_NAME_PREF_KEY, name)
+        }
     }
 
+    private fun getSavedRingtoneUri(): String? {
+        return getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+            .getString(RINGTONE_PREF_KEY, null)
+    }
+
+    private fun getSavedRingtoneName(): String? {
+        return getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+            .getString(RINGTONE_NAME_PREF_KEY, null)
+    }
+    private val selectAudioLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { audioUri ->
+            handleSelectedAudio(audioUri)
+        }
+    }
+    private fun handleSelectedAudio(uri: Uri) {
+        try {
+            val inputStream: InputStream? = contentResolver.openInputStream(uri)
+            inputStream?.let { stream ->
+                // Get original filename
+                val originalName = getFileNameFromUri(uri) ?: "custom_ringtone"
+                val fileName = if (originalName.contains('.')) {
+                    originalName
+                } else {
+                    "$originalName.mp3"
+                }
+
+                // Create ringtones directory if it doesn't exist
+                val ringtonesDir = File(filesDir, "ringtones")
+                if (!ringtonesDir.exists()) {
+                    ringtonesDir.mkdirs()
+                }
+
+                // Create the file
+                val file = File(ringtonesDir, fileName)
+                val outputStream = FileOutputStream(file)
+
+                // Copy the file
+                stream.copyTo(outputStream)
+                stream.close()
+                outputStream.close()
+
+                // Add to media store as alarm ringtone
+                addToMediaStore(file, true)
+
+                // Refresh media store to make it appear immediately
+                sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)))
+
+                Toast.makeText(this, "Alarm ringtone added successfully", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error handling selected audio", e)
+            Toast.makeText(this, "Error adding ringtone: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    private fun getFileNameFromUri(uri: Uri): String? {
+        var result: String? = null
+        if (uri.scheme == "content") {
+            val cursor: Cursor? = contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    result = it.getString(it.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME))
+                }
+            }
+        }
+        if (result == null) {
+            result = uri.path
+            val cut = result?.lastIndexOf('/')
+            if (cut != -1) {
+                result = result?.substring(cut!! + 1)
+            }
+        }
+        return result
+    }
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -261,12 +351,19 @@ class MainActivity : ComponentActivity() {
         val deviceId = remember { retrieveDeviceId() }
         var showInstruction by remember { mutableStateOf(true) }
 
-        var currentLanguage by remember { mutableStateOf(prefs.getString("languageFlag", "en") ?: "en") }
+        var currentLanguage by remember {
+            mutableStateOf(
+                if (countryCode == "jp") {
+                    prefs.getString("languageFlagJP", "en") ?: "en"
+                } else {
+                    prefs.getString("languageFlag", "en") ?: "en"
+                }
+            )
+        }
         var employeeData by remember { mutableStateOf<EmployeeData?>(null) }
         var isLoading by remember { mutableStateOf(true) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
 
-        // Fetch profile data
         LaunchedEffect(deviceId, countryCode) {
             isLoading = true
             errorMessage = null
@@ -290,7 +387,12 @@ class MainActivity : ComponentActivity() {
                             }
                             if (lang != currentLanguage) {
                                 currentLanguage = lang
-                                prefs.edit().putString("languageFlag", lang).apply()
+                                // Save to appropriate key based on country
+                                if (countryCode == "jp") {
+                                    prefs.edit().putString("languageFlagJP", lang).apply()
+                                } else {
+                                    prefs.edit().putString("languageFlag", lang).apply()
+                                }
                             }
                         }
                     } else {
@@ -312,7 +414,13 @@ class MainActivity : ComponentActivity() {
                 else -> "1"
             }
             val editor = prefs.edit()
-            editor.putString("languageFlag", language)
+
+            // Save to appropriate key based on country
+            if (countryCode == "jp") {
+                editor.putString("languageFlagJP", language)
+            } else {
+                editor.putString("languageFlag", language)
+            }
             editor.apply()
             currentLanguage = language
 
@@ -343,6 +451,7 @@ class MainActivity : ComponentActivity() {
             } else {
                 RetrofitClient.instance
             }
+
             apiService.getProfile(deviceId).enqueue(object : Callback<ProfileResponse> {
                 override fun onResponse(call: Call<ProfileResponse>, response: Response<ProfileResponse>) {
                     if (response.isSuccessful && response.body()?.success == true) {
@@ -793,9 +902,10 @@ class MainActivity : ComponentActivity() {
                         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                             Box(modifier = Modifier.padding(innerPadding)) {
                                 if (showInstruction) {
-                                    InstructionDialog {
-                                        showInstruction = false
-                                    }
+                                    InstructionDialog(
+                                        currentLanguage = currentLanguage,
+                                        onDismiss = { showInstruction = false }
+                                    )
                                 }
 
                                 Column(
@@ -803,7 +913,10 @@ class MainActivity : ComponentActivity() {
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center
                                 ) {
-                                    RingStatusView(countryCode)
+                                    RingStatusView(
+                                        countryCode = countryCode,
+                                        currentLanguage = currentLanguage
+                                    )
                                 }
                             }
                         }
@@ -1012,7 +1125,14 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun InstructionDialog(onDismiss: () -> Unit) {
+    fun InstructionDialog(
+        currentLanguage: String,
+        onDismiss: () -> Unit
+    ) {
+        fun getTranslatedText(englishText: String, japaneseText: String): String {
+            return if (currentLanguage == "ja") japaneseText else englishText
+        }
+
         AlertDialog(
             onDismissRequest = {},
             title = {
@@ -1066,21 +1186,14 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-
-
-    // Replace your RingStatusView composable with this enhanced version
     @Composable
-    fun RingStatusView(countryCode: String) {
+    fun RingStatusView(
+        countryCode: String,
+        currentLanguage: String
+    ) {
         val context = LocalContext.current
-        val prefs = remember { context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE) }
-        var currentCountry by remember { mutableStateOf(countryCode) }
-
         // Audio manager for volume control
         val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
-        val currentLanguage = remember {
-            context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-                .getString("languageFlag", "en") ?: "en"
-        }
 
         // Volume state
         var currentVolume by remember {
@@ -1091,12 +1204,17 @@ class MainActivity : ComponentActivity() {
         // Ringtone states
         var showRingtoneDialog by remember { mutableStateOf(false) }
         var currentRingtone by remember {
-            mutableStateOf(RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_ALARM)?.toString() ?: "")
+            mutableStateOf(
+                getSavedRingtoneUri() ?:
+                RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_ALARM)?.toString() ?: ""
+            )
         }
         var currentRingtoneName by remember {
-            mutableStateOf(getRingtoneName(context, currentRingtone))
+            mutableStateOf(
+                getSavedRingtoneName() ?:
+                getRingtoneName(context, currentRingtone)
+            )
         }
-
         fun getTranslatedText(englishText: String, japaneseText: String): String {
             return if (currentLanguage == "ja") japaneseText else englishText
         }
@@ -1143,6 +1261,7 @@ class MainActivity : ComponentActivity() {
             VolumeSlider(
                 volume = currentVolume,
                 maxVolume = maxVolume,
+                currentLanguage = currentLanguage,
                 onVolumeChange = { newVolume ->
                     currentVolume = newVolume
                     audioManager.setStreamVolume(AudioManager.STREAM_ALARM, newVolume, 0)
@@ -1203,9 +1322,12 @@ class MainActivity : ComponentActivity() {
                 RingtoneSelectionDialog(
                     context = context,
                     currentRingtone = currentRingtone,
+                    currentLanguage = currentLanguage,
                     onRingtoneSelected = { uri, name ->
                         currentRingtone = uri
                         currentRingtoneName = name
+                        // Save to SharedPreferences
+                        saveSelectedRingtone(uri, name)
                         // Set as default alarm ringtone
                         RingtoneManager.setActualDefaultRingtoneUri(
                             context,
@@ -1214,7 +1336,8 @@ class MainActivity : ComponentActivity() {
                         )
                         showRingtoneDialog = false
                     },
-                    onDismiss = { showRingtoneDialog = false }
+                    onDismiss = { showRingtoneDialog = false },
+                    countryCode = countryCode
                 )
             }
         }
@@ -1224,12 +1347,17 @@ class MainActivity : ComponentActivity() {
     fun VolumeSlider(
         volume: Int,
         maxVolume: Int,
+        currentLanguage: String,
         onVolumeChange: (Int) -> Unit
     ) {
         var sliderPosition by remember { mutableStateOf(volume.toFloat()) }
 
         LaunchedEffect(volume) {
             sliderPosition = volume.toFloat()
+        }
+
+        fun getTranslatedText(englishText: String, japaneseText: String): String {
+            return if (currentLanguage == "ja") japaneseText else englishText
         }
 
         Column(
@@ -1251,7 +1379,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Icon(
                         imageVector = Icons.Default.VolumeDown,
-                        contentDescription = "Volume Down",
+                        contentDescription = getTranslatedText("Volume Down", "音量を下げる"),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -1283,7 +1411,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Icon(
                         imageVector = Icons.Default.VolumeUp,
-                        contentDescription = "Volume Up",
+                        contentDescription = getTranslatedText("Volume Up", "音量を上げる"),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -1297,6 +1425,7 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
+
 
     @Composable
     fun ModernVolumeSlider(
@@ -1361,22 +1490,81 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun addToMediaStore(file: File, isAlarm: Boolean = false) {
+        val values = ContentValues().apply {
+            put(MediaStore.Audio.Media.DATA, file.absolutePath)
+            put(MediaStore.Audio.Media.TITLE, file.nameWithoutExtension)
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+            put(MediaStore.Audio.Media.IS_ALARM, isAlarm) // Mark specifically as alarm tone
+            put(MediaStore.Audio.Media.IS_RINGTONE, false)
+            put(MediaStore.Audio.Media.IS_NOTIFICATION, false)
+            put(MediaStore.Audio.Media.IS_MUSIC, false)
+        }
+
+        try {
+            val uri = contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+
+            // For Android Q and above, we need to set the ringtone type explicitly
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isAlarm) {
+                val alarmValues = ContentValues().apply {
+                    put(MediaStore.Audio.Media.IS_ALARM, true)
+                }
+                uri?.let {
+                    contentResolver.update(it, alarmValues, null, null)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error adding to media store", e)
+        }
+    }
+
+    fun getCustomRingtones(context: Context): List<RingtoneInfo> {
+        val customRingtones = mutableListOf<RingtoneInfo>()
+        val ringtonesDir = File(context.filesDir, "ringtones")
+
+        if (ringtonesDir.exists()) {
+            ringtonesDir.listFiles()?.forEach { file ->
+                if (file.isFile && (file.extension.equals("mp3", ignoreCase = true) ||
+                            file.extension.equals("wav", ignoreCase = true) ||
+                            file.extension.equals("m4a", ignoreCase = true))) {
+                    val uri = Uri.fromFile(file).toString()
+                    customRingtones.add(RingtoneInfo(file.nameWithoutExtension, uri))
+                }
+            }
+        }
+
+        return customRingtones
+    }
+    private fun isAlarmRingtone(context: Context, uri: Uri): Boolean {
+        val projection = arrayOf(MediaStore.Audio.Media.IS_ALARM)
+        val cursor = context.contentResolver.query(uri, projection, null, null, null)
+
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val isAlarm = it.getInt(it.getColumnIndexOrThrow(MediaStore.Audio.Media.IS_ALARM))
+                return isAlarm == 1
+            }
+        }
+
+        return false
+    }
     @Composable
     fun RingtoneSelectionDialog(
         context: Context,
         currentRingtone: String,
+        currentLanguage: String,
         onRingtoneSelected: (String, String) -> Unit,
-        onDismiss: () -> Unit
+        onDismiss: () -> Unit,
+        countryCode: String,
     ) {
         val ringtones = remember { getRingtones(context) }
-        val currentLanguage = remember {
-            context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-                .getString("languageFlag", "en") ?: "en"
-        }
         var selectedRingtone by remember { mutableStateOf(currentRingtone) }
         var selectedRingtoneName by remember {
             mutableStateOf(getRingtoneName(context, currentRingtone))
         }
+        val allRingtones = remember { getRingtones(context) }
+        val alarmRingtones = remember { allRingtones.filter { isAlarmRingtone(context, Uri.parse(it.uri)) } }
+        val otherRingtones = remember { allRingtones.filterNot { isAlarmRingtone(context, Uri.parse(it.uri)) } }
         var currentPlayingRingtone by remember { mutableStateOf<Ringtone?>(null) }
         val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
@@ -1387,7 +1575,7 @@ class MainActivity : ComponentActivity() {
         fun playRingtone(uri: String) {
             currentPlayingRingtone?.stop()
             val ringtone = RingtoneManager.getRingtone(context, Uri.parse(uri))
-            ringtone.streamType = AudioManager.STREAM_ALARM // Set to use alarm volume
+            ringtone.streamType = AudioManager.STREAM_ALARM
             ringtone.play()
             currentPlayingRingtone = ringtone
         }
@@ -1399,7 +1587,7 @@ class MainActivity : ComponentActivity() {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(700.dp)  // Changed from 400.dp to 600.dp to make it longer
+                    .height(700.dp)
                     .padding(16.dp),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -1408,20 +1596,67 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
-                    Text(
-                        text = getTranslatedText("Select Ringtone", "着信音を選択"),
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = getTranslatedText("Select Ringtone", "着信音を選択"),
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        // Add Custom Ringtone Button
+                        IconButton(
+                            onClick = {
+                                (context as MainActivity).selectAudioLauncher.launch("audio/*")
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = getTranslatedText("Add Custom Ringtone", "カスタム着信音を追加"),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
                     LazyColumn(
                         modifier = Modifier.weight(1f)
                     ) {
-                        items(ringtones) { ringtone ->
+                        item {
+                            Text(
+                                text = getTranslatedText("Alarm Tones", "アラーム音"),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(16.dp, 8.dp)
+                            )
+                        }
+
+                        items(alarmRingtones) { ringtone ->
+                            RingtoneItem(
+                                ringtone = ringtone,
+                                isSelected = ringtone.uri == selectedRingtone,
+                                onClick = {
+                                    selectedRingtone = ringtone.uri
+                                    selectedRingtoneName = ringtone.name
+                                    playRingtone(ringtone.uri)
+                                }
+                            )
+                        }
+
+                        item {
+                            Text(
+                                text = getTranslatedText("Other Tones", "その他の音"),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(16.dp, 8.dp)
+                            )
+                        }
+
+                        items(otherRingtones) { ringtone ->
                             RingtoneItem(
                                 ringtone = ringtone,
                                 isSelected = ringtone.uri == selectedRingtone,
@@ -1512,8 +1747,15 @@ class MainActivity : ComponentActivity() {
         val uri: String
     )
 
+
+    // Replace your existing getRingtones method with this updated version
     fun getRingtones(context: Context): List<RingtoneInfo> {
         val ringtones = mutableListOf<RingtoneInfo>()
+
+        // Add custom ringtones first
+        ringtones.addAll(getCustomRingtones(context))
+
+        // Add system ringtones
         val ringtoneManager = RingtoneManager(context)
         ringtoneManager.setType(RingtoneManager.TYPE_ALARM)
 

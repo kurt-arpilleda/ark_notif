@@ -705,7 +705,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         isRinging = true
         sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
-        val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+
+        // Get the custom ringtone URI from SharedPreferences
+        val ringtoneUri = sharedPreferences.getString("selected_ringtone_uri", null)?.let { Uri.parse(it) }
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
 
         ringtoneJob?.cancel()
 
@@ -723,10 +726,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 }
 
                 currentRingtone = withContext(Dispatchers.IO) {
-                    RingtoneManager.getRingtone(this@RingMonitoringService, alarmUri).apply {
+                    RingtoneManager.getRingtone(this@RingMonitoringService, ringtoneUri).apply {
                         setAudioAttributes(
                             AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_ALARM) // Already set to ALARM (correct)
+                                .setUsage(AudioAttributes.USAGE_ALARM)
                                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                                 .build()
                         )
@@ -766,7 +769,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         updateNotification()
     }
-
     private fun stopRinging() {
         if (!isRinging) return
 

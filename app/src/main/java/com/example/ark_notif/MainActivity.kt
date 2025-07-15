@@ -1557,7 +1557,6 @@ class MainActivity : ComponentActivity() {
         onDismiss: () -> Unit,
         countryCode: String,
     ) {
-        // Change to mutableStateList to track changes
         var allRingtones by remember { mutableStateOf(getRingtones(context)) }
         val alarmRingtones = remember { allRingtones.filter { isAlarmRingtone(context, Uri.parse(it.uri)) } }
         val otherRingtones = remember { allRingtones.filterNot { isAlarmRingtone(context, Uri.parse(it.uri)) } }

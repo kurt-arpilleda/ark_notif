@@ -1630,6 +1630,26 @@ class MainActivity : ComponentActivity() {
                     ) {
                         item {
                             Text(
+                                text = getTranslatedText("Your sounds", "自分のサウンド"),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(16.dp, 8.dp)
+                            )
+                        }
+
+                        items(otherRingtones) { ringtone ->
+                            RingtoneItem(
+                                ringtone = ringtone,
+                                isSelected = ringtone.uri == selectedRingtone,
+                                onClick = {
+                                    selectedRingtone = ringtone.uri
+                                    selectedRingtoneName = ringtone.name
+                                    playRingtone(ringtone.uri)
+                                }
+                            )
+                        }
+
+                        item {
+                            Text(
                                 text = getTranslatedText("Alarm Tones", "アラーム音"),
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.padding(16.dp, 8.dp)
@@ -1647,27 +1667,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
-
-                        item {
-                            Text(
-                                text = getTranslatedText("Other Tones", "その他の音"),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(16.dp, 8.dp)
-                            )
-                        }
-
-                        items(otherRingtones) { ringtone ->
-                            RingtoneItem(
-                                ringtone = ringtone,
-                                isSelected = ringtone.uri == selectedRingtone,
-                                onClick = {
-                                    selectedRingtone = ringtone.uri
-                                    selectedRingtoneName = ringtone.name
-                                    playRingtone(ringtone.uri)
-                                }
-                            )
-                        }
                     }
+
 
                     Spacer(modifier = Modifier.height(16.dp))
 

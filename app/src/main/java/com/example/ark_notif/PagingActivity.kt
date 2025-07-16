@@ -47,6 +47,7 @@ import retrofit2.Response
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.saveable.rememberSaveable
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -173,7 +174,11 @@ class PagingActivity : ComponentActivity() {
 
                 // Location text
                 Text(
-                    text = if (currentLanguage == "ja") "行き先: ${post.locationText}" else "Go to: ${post.locationText}",
+                    text = if (post.location == 8 || post.location == 9) {
+                        post.locationText
+                    } else {
+                        if (currentLanguage == "ja") "行き先: ${post.locationText}" else "Go to: ${post.locationText}"
+                    },
                     style = MaterialTheme.typography.headlineSmall.copy(
                         fontWeight = FontWeight.Bold
                     ),
@@ -200,6 +205,7 @@ class PagingActivity : ComponentActivity() {
                     )
                 }
 
+                // Reply options dropdown (modern square design)
                 var expanded by remember { mutableStateOf(false) }
                 Box(
                     modifier = Modifier
@@ -208,7 +214,12 @@ class PagingActivity : ComponentActivity() {
                 ) {
                     OutlinedButton(
                         onClick = { expanded = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RectangleShape, // Square corners
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                     ) {
                         Text(
                             text = replyOptions.firstOrNull { it.second == selectedReply }?.first ?: "",
@@ -220,10 +231,13 @@ class PagingActivity : ComponentActivity() {
                             contentDescription = null
                         )
                     }
+
                     DropdownMenu(
                         expanded = expanded,
                         onDismissRequest = { expanded = false },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
                     ) {
                         replyOptions.forEach { (text, value) ->
                             DropdownMenuItem(
@@ -231,12 +245,12 @@ class PagingActivity : ComponentActivity() {
                                 onClick = {
                                     selectedReply = value
                                     expanded = false
-                                }
+                                },
+                                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
                             )
                         }
                     }
                 }
-
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Send button

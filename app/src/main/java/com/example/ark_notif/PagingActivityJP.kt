@@ -88,19 +88,9 @@ class PagingActivityJP : ComponentActivity() {
         return try {
             Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown-device"
         } catch (e: Exception) {
-            Log.e("PagingActivity", "Error getting device identifier: ${e.message}", e)
+            Log.e("PagingActivityJP", "Error getting device identifier: ${e.message}", e)
             "unknown-device"
         }
-    }
-
-    private fun restartActivity() {
-        val intent = Intent(this, PagingActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(intent)
-
-        overridePendingTransition(R.anim.animate_fade_enter, R.anim.animate_fade_exit)
-
-        finish()
     }
 
 
@@ -362,11 +352,11 @@ class PagingActivityJP : ComponentActivity() {
                 apiService.updateLanguageFlag(employee.idNumber, languageFlag).enqueue(object : Callback<BasicResponse> {
                     override fun onResponse(call: Call<BasicResponse>, response: Response<BasicResponse>) {
                         if (!response.isSuccessful || response.body()?.success != true) {
-                            Log.e("PagingActivity", "Failed to update language flag on server: ${response.body()?.error}")
+                            Log.e("PagingActivityJP", "Failed to update language flag on server: ${response.body()?.error}")
                         }
                     }
                     override fun onFailure(call: Call<BasicResponse>, t: Throwable) {
-                        Log.e("PagingActivity", "Network error updating language flag", t)
+                        Log.e("PagingActivityJP", "Network error updating language flag", t)
                     }
                 })
             }
@@ -381,11 +371,6 @@ class PagingActivityJP : ComponentActivity() {
                         editor.putString("phorjp", country)
                         editor.apply()
                         phOrJp = country
-                        (context as? Activity)?.let {
-                            it.runOnUiThread {
-                                restartActivity()
-                            }
-                        }
                     } else {
                         val message = if (country == "jp") {
                             if (currentLanguage == "ja") {
@@ -946,14 +931,14 @@ class PagingActivityJP : ComponentActivity() {
                                                         response: Response<BasicResponse>
                                                     ) {
                                                         if (!response.isSuccessful || response.body()?.success != true) {
-                                                            Log.e("PagingActivity", "Failed to update paging status")
+                                                            Log.e("PagingActivityJP", "Failed to update paging status")
                                                         } else {
                                                             pagingPosts = pagingPosts.filter { it.pagingId != pagingId }
                                                         }
                                                     }
 
                                                     override fun onFailure(call: Call<BasicResponse>, t: Throwable) {
-                                                        Log.e("PagingActivity", "Network error updating paging status", t)
+                                                        Log.e("PagingActivityJP", "Network error updating paging status", t)
                                                     }
                                                 }
                                             )
@@ -987,14 +972,14 @@ class PagingActivityJP : ComponentActivity() {
                                                             response: Response<BasicResponse>
                                                         ) {
                                                             if (!response.isSuccessful || response.body()?.success != true) {
-                                                                Log.e("PagingActivity", "Failed to update paging status")
+                                                                Log.e("PagingActivityJP", "Failed to update paging status")
                                                             } else {
                                                                 pagingPosts = pagingPosts.filter { it.pagingId != pagingId }
                                                             }
                                                         }
 
                                                         override fun onFailure(call: Call<BasicResponse>, t: Throwable) {
-                                                            Log.e("PagingActivity", "Network error updating paging status", t)
+                                                            Log.e("PagingActivityJP", "Network error updating paging status", t)
                                                         }
                                                     }
                                                 )

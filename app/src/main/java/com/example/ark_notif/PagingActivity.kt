@@ -93,16 +93,6 @@ class PagingActivity : ComponentActivity() {
         }
     }
 
-    private fun restartActivity() {
-        val intent = Intent(this, PagingActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(intent)
-
-        overridePendingTransition(R.anim.animate_fade_enter, R.anim.animate_fade_exit)
-
-        finish()
-    }
-
 
     @Composable
     fun PagingPostItem(
@@ -381,11 +371,6 @@ class PagingActivity : ComponentActivity() {
                         editor.putString("phorjp", country)
                         editor.apply()
                         phOrJp = country
-                        (context as? Activity)?.let {
-                            it.runOnUiThread {
-                                restartActivity()
-                            }
-                        }
                     } else {
                         val message = if (country == "jp") {
                             if (currentLanguage == "ja") {

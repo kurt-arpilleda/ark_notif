@@ -57,6 +57,8 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.runtime.Composable
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -106,9 +108,11 @@ class PagingActivity : ComponentActivity() {
         post: PagingPost,
         imageLoader: ImageLoader,
         currentLanguage: String,
-        onAcknowledge: (Int) -> Unit,
+        onAcknowledge: (Int, Int) -> Unit, // Now takes reply code as second parameter
         phOrJp: String
     ) {
+        var selectedReply by remember { mutableStateOf(1) } // Default to "I am going now" (1)
+
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -123,7 +127,7 @@ class PagingActivity : ComponentActivity() {
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
-                // Requester profile with date
+                // Requester profile with date (unchanged)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -177,15 +181,71 @@ class PagingActivity : ComponentActivity() {
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Acknowledge button
+                // Reply options dropdown
+                val replyOptions = if (currentLanguage == "ja") {
+                    listOf(
+                        "今向かっています" to 1,
+                        "会議中で行けません" to 2,
+                        "5分後に向かいます" to 3,
+                        "社外にいます" to 4
+                    )
+                } else {
+                    listOf(
+                        "I am going now" to 1,
+                        "I cannot go now I am in a meeting" to 2,
+                        "I will go after 5 minutes" to 3,
+                        "I am outside the company" to 4
+                    )
+                }
+
+                var expanded by remember { mutableStateOf(false) }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentSize(Alignment.TopStart)
+                ) {
+                    OutlinedButton(
+                        onClick = { expanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = replyOptions.firstOrNull { it.second == selectedReply }?.first ?: "",
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Start
+                        )
+                        Icon(
+                            imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                            contentDescription = null
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        replyOptions.forEach { (text, value) ->
+                            DropdownMenuItem(
+                                text = { Text(text) },
+                                onClick = {
+                                    selectedReply = value
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Send button
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     Button(
-                        onClick = { onAcknowledge(post.pagingId) },
+                        onClick = { onAcknowledge(post.pagingId, selectedReply) },
                         modifier = Modifier.widthIn(min = 120.dp),
                         shape = MaterialTheme.shapes.large,
                         colors = ButtonDefaults.buttonColors(
@@ -194,7 +254,7 @@ class PagingActivity : ComponentActivity() {
                         )
                     ) {
                         Text(
-                            text = if (currentLanguage == "ja") "了解" else "On My Way",
+                            text = if (currentLanguage == "ja") "送信" else "Send",
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
@@ -875,14 +935,18 @@ class PagingActivity : ComponentActivity() {
                                         post = pagingPosts[0],
                                         imageLoader = imageLoader,
                                         currentLanguage = currentLanguage,
-                                        onAcknowledge = { pagingId ->
+                                        onAcknowledge = { pagingId, replyCode ->
                                             val apiService = if (phOrJp == "jp") {
                                                 RetrofitClientJP.instance
                                             } else {
                                                 RetrofitClient.instance
                                             }
 
-                                            apiService.updatePagingStatus(pagingId, employeeData?.idNumber ?: "").enqueue(
+                                            apiService.updatePagingStatus(
+                                                pagingId,
+                                                employeeData?.idNumber ?: "",
+                                                replyCode // Add the reply code
+                                            ).enqueue(
                                                 object : Callback<BasicResponse> {
                                                     override fun onResponse(
                                                         call: Call<BasicResponse>,
@@ -916,14 +980,18 @@ class PagingActivity : ComponentActivity() {
                                             post = post,
                                             imageLoader = imageLoader,
                                             currentLanguage = currentLanguage,
-                                            onAcknowledge = { pagingId ->
+                                            onAcknowledge = { pagingId, replyCode ->
                                                 val apiService = if (phOrJp == "jp") {
                                                     RetrofitClientJP.instance
                                                 } else {
                                                     RetrofitClient.instance
                                                 }
 
-                                                apiService.updatePagingStatus(pagingId, employeeData?.idNumber ?: "").enqueue(
+                                                apiService.updatePagingStatus(
+                                                    pagingId,
+                                                    employeeData?.idNumber ?: "",
+                                                    replyCode
+                                                ).enqueue(
                                                     object : Callback<BasicResponse> {
                                                         override fun onResponse(
                                                             call: Call<BasicResponse>,

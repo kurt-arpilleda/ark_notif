@@ -717,8 +717,11 @@ class JapanActivity : ComponentActivity() {
                                             editor.putString("phorjp", "ph")
                                             editor.apply()
                                             val intent = Intent(context, PhilippineActivity::class.java)
-                                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                                             context.startActivity(intent)
+                                            (context as Activity).overridePendingTransition(
+                                                R.anim.animate_fade_enter,
+                                                R.anim.animate_fade_exit
+                                            )
                                         }
                                     },
                                 contentAlignment = Alignment.Center
@@ -760,8 +763,11 @@ class JapanActivity : ComponentActivity() {
                                             editor.putString("phorjp", "jp")
                                             editor.apply()
                                             val intent = Intent(context, JapanActivity::class.java)
-                                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                                             context.startActivity(intent)
+                                            (context as Activity).overridePendingTransition(
+                                                R.anim.animate_fade_enter,
+                                                R.anim.animate_fade_exit
+                                            )
                                         }
                                     },
                                 contentAlignment = Alignment.Center

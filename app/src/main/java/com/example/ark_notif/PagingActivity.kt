@@ -108,10 +108,10 @@ class PagingActivity : ComponentActivity() {
         post: PagingPost,
         imageLoader: ImageLoader,
         currentLanguage: String,
-        onAcknowledge: (Int, Int) -> Unit, // Now takes reply code as second parameter
+        onAcknowledge: (Int, Int, Int) -> Unit,
         phOrJp: String
     ) {
-        var selectedReply by remember { mutableStateOf(1) } // Default to "I am going now" (1)
+        var selectedReply by remember { mutableStateOf(1) }
 
         Card(
             modifier = Modifier
@@ -245,7 +245,7 @@ class PagingActivity : ComponentActivity() {
                     contentAlignment = Alignment.Center
                 ) {
                     Button(
-                        onClick = { onAcknowledge(post.pagingId, selectedReply) },
+                        onClick = { onAcknowledge(post.pagingId, selectedReply, post.userIndex) },
                         modifier = Modifier.widthIn(min = 120.dp),
                         shape = MaterialTheme.shapes.large,
                         colors = ButtonDefaults.buttonColors(
@@ -935,8 +935,8 @@ class PagingActivity : ComponentActivity() {
                                         post = pagingPosts[0],
                                         imageLoader = imageLoader,
                                         currentLanguage = currentLanguage,
-                                        onAcknowledge = { pagingId, replyCode ->
-                                            val apiService = if (phOrJp == "jp") {
+                                        onAcknowledge = { pagingId, replyCode, userIndex ->
+                                        val apiService = if (phOrJp == "jp") {
                                                 RetrofitClientJP.instance
                                             } else {
                                                 RetrofitClient.instance
@@ -945,7 +945,8 @@ class PagingActivity : ComponentActivity() {
                                             apiService.updatePagingStatus(
                                                 pagingId,
                                                 employeeData?.idNumber ?: "",
-                                                replyCode // Add the reply code
+                                                replyCode,
+                                                userIndex
                                             ).enqueue(
                                                 object : Callback<BasicResponse> {
                                                     override fun onResponse(
@@ -980,7 +981,7 @@ class PagingActivity : ComponentActivity() {
                                             post = post,
                                             imageLoader = imageLoader,
                                             currentLanguage = currentLanguage,
-                                            onAcknowledge = { pagingId, replyCode ->
+                                            onAcknowledge = { pagingId, replyCode, userIndex ->
                                                 val apiService = if (phOrJp == "jp") {
                                                     RetrofitClientJP.instance
                                                 } else {
@@ -990,7 +991,8 @@ class PagingActivity : ComponentActivity() {
                                                 apiService.updatePagingStatus(
                                                     pagingId,
                                                     employeeData?.idNumber ?: "",
-                                                    replyCode
+                                                    replyCode,
+                                                    userIndex
                                                 ).enqueue(
                                                     object : Callback<BasicResponse> {
                                                         override fun onResponse(

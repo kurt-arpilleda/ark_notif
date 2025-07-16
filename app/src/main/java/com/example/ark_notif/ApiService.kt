@@ -34,13 +34,8 @@ interface ApiService {
     @POST("V4/Others/Kurt/RingAPI2/kurt_updatePagingStatus.php")
     fun updatePagingStatus(
         @Field("pagingId") pagingId: Int,
-        @Field("idNumber") idNumber: String
-    ): Call<BasicResponse>
-    @FormUrlEncoded
-    @POST("V4/Others/Kurt/RingAPI2/kurt_updatePagingStatus.php")
-    fun updatePagingStatus(
-        @Field("pagingId") pagingId: Int,
         @Field("idNumber") idNumber: String,
-        @Field("notifReply") notifReply: Int // Add this parameter
+        @Field("notifReply") notifReply: Int,
+        @Field("userIndex") userIndex: Int // Add this parameter
     ): Call<BasicResponse>
 }

@@ -54,7 +54,8 @@ data class PagingPost(
     val picture: String?,
     val location: Int,
     val locationText: String,
-    val dateTime: String
+    val dateTime: String,
+    val userIndex: Int
 )
 
 data class PagingPostsResponse(

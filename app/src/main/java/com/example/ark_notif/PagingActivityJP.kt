@@ -64,7 +64,7 @@ import androidx.compose.runtime.Composable
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-class PagingActivity : ComponentActivity() {
+class PagingActivityJP : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -137,8 +137,8 @@ class PagingActivity : ComponentActivity() {
                     AsyncImage(
                         model =
                             rememberUrlWithFallback(
-                                "http://192.168.254.163/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}",
-                                "http://126.209.7.246/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}"
+                                "http://192.168.1.213/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}",
+                                "http://220.157.175.232/V4/11-A%20Employee%20List%20V2/profilepictures/${post.picture}"
                             ),
                         contentDescription = if (currentLanguage == "ja") "リクエスト者のプロフィール" else "Requester Profile",
                         modifier = Modifier
@@ -292,7 +292,7 @@ class PagingActivity : ComponentActivity() {
         val deviceId = remember { retrieveDeviceId() }
 
         var currentLanguage by rememberSaveable {
-            mutableStateOf(prefs.getString("languageFlag", "en") ?: "en")
+            mutableStateOf(prefs.getString("languageFlagJP", "en") ?: "en")
         }
 
         var phOrJp by rememberSaveable {
@@ -312,7 +312,7 @@ class PagingActivity : ComponentActivity() {
             isLoading = true
             errorMessage = null
 
-            val apiService = RetrofitClient.instance
+            val apiService = RetrofitClientJP.instance
 
             apiService.getProfile(deviceId).enqueue(object : Callback<ProfileResponse> {
                 override fun onResponse(call: Call<ProfileResponse>, response: Response<ProfileResponse>) {
@@ -329,7 +329,7 @@ class PagingActivity : ComponentActivity() {
 
                             if (lang != currentLanguage) {
                                 currentLanguage = lang
-                                prefs.edit().putString("languageFlag", lang).apply()
+                                prefs.edit().putString("languageFlagJP", lang).apply()
                             }
                         }
                     } else {
@@ -351,13 +351,13 @@ class PagingActivity : ComponentActivity() {
             }
 
             val editor = prefs.edit()
-            editor.putString("languageFlag", language)
+            editor.putString("languageFlagJP", language)
             editor.apply()
 
             currentLanguage = language
 
             employeeData?.let { employee ->
-                val apiService = RetrofitClient.instance
+                val apiService = RetrofitClientJP.instance
 
                 apiService.updateLanguageFlag(employee.idNumber, languageFlag).enqueue(object : Callback<BasicResponse> {
                     override fun onResponse(call: Call<BasicResponse>, response: Response<BasicResponse>) {
@@ -373,7 +373,7 @@ class PagingActivity : ComponentActivity() {
         }
 
         fun updateCountryPreference(country: String) {
-            val apiService = RetrofitClient.instance
+            val apiService = RetrofitClientJP.instance
             apiService.getProfile(deviceId).enqueue(object : Callback<ProfileResponse> {
                 override fun onResponse(call: Call<ProfileResponse>, response: Response<ProfileResponse>) {
                     if (response.isSuccessful && response.body()?.success == true) {
@@ -472,8 +472,8 @@ class PagingActivity : ComponentActivity() {
                                     // Show actual profile
                                     val imageUrl = employeeData?.picture?.let { picture ->
                                             rememberUrlWithFallback(
-                                                "http://192.168.254.163/V4/11-A%20Employee%20List%20V2/profilepictures/$picture",
-                                                "http://126.209.7.246/V4/11-A%20Employee%20List%20V2/profilepictures/$picture"
+                                                "http://192.168.1.213/V4/11-A%20Employee%20List%20V2/profilepictures/$picture",
+                                                "http://220.157.175.232/V4/11-A%20Employee%20List%20V2/profilepictures/$picture"
                                             )
                                     }
 
@@ -837,7 +837,7 @@ class PagingActivity : ComponentActivity() {
                         isLoadingPosts = true
                         errorLoadingPosts = null
 
-                        val apiService = RetrofitClient.instance
+                        val apiService = RetrofitClientJP.instance
 
                         apiService.getPagingPosts(deviceId).enqueue(object : Callback<PagingPostsResponse> {
                             override fun onResponse(
@@ -924,7 +924,7 @@ class PagingActivity : ComponentActivity() {
                                         imageLoader = imageLoader,
                                         currentLanguage = currentLanguage,
                                         onAcknowledge = { pagingId, replyCode, userIndex ->
-                                            val apiService = RetrofitClient.instance
+                                            val apiService = RetrofitClientJP.instance
 
                                             apiService.updatePagingStatus(
                                                 pagingId,
@@ -965,7 +965,7 @@ class PagingActivity : ComponentActivity() {
                                             imageLoader = imageLoader,
                                             currentLanguage = currentLanguage,
                                             onAcknowledge = { pagingId, replyCode, userIndex ->
-                                                val apiService = RetrofitClient.instance
+                                                val apiService = RetrofitClientJP.instance
 
                                                 apiService.updatePagingStatus(
                                                     pagingId,

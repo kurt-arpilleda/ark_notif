@@ -801,11 +801,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             manager.createNotificationChannel(serviceChannel)
         }
     }
-
     private fun createNotification(): Notification {
         val phorjp = sharedPreferences.getString("phorjp", null)
         val isJapanese = phorjp == "jp"
-        var notificationType = sharedPreferences.getString("current_notification_type", null)
+        val notificationType = sharedPreferences.getString("current_notification_type", null)
 
         val toggleIntent = Intent(this, RingMonitoringService::class.java).apply {
             action = ACTION_TOGGLE_MONITORING
@@ -817,16 +816,26 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Determine which app to open based on notification type
+        // Determine which app to open based on notification type and phorjp
         val contentIntent = when (notificationType) {
             "NG" -> packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
-            "PAGING" -> Intent(this, PagingActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            "PAGING" -> {
+                if (phorjp == "jp") {
+                    Intent(this, PagingActivityJP::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    }
+                } else {
+                    Intent(this, PagingActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    }
+                }
             }
-            else -> Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            else -> {
+                    Intent(this, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    }
             }
         }
 
@@ -905,6 +914,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             )
             .build()
     }
+
     private fun updateNotification() {
         if (monitoringJob?.isActive == true && !isMonitoring) {
             isMonitoring = true

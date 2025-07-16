@@ -62,6 +62,24 @@
             android:screenOrientation="portrait"
             android:exported="true"
             />
+        <activity
+            android:name=".PagingActivityJP"
+            android:label="PagingJP Notif"
+            android:screenOrientation="portrait"
+            android:exported="true"
+            />
+        <activity
+            android:name=".PhilippineActivity"
+            android:label="Philippines Activity"
+            android:screenOrientation="portrait"
+            android:exported="true"
+            />
+        <activity
+            android:name=".JapanActivity"
+            android:label="Japan Activity"
+            android:screenOrientation="portrait"
+            android:exported="true"
+            />
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

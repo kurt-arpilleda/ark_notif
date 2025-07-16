@@ -666,7 +666,7 @@ class PagingActivityJP : ComponentActivity() {
                                     .clickable {
                                         if (phOrJp != "ph") {
                                             updateCountryPreference("ph")
-                                            val intent = Intent(context, PhilippineActivity::class.java)
+                                            val intent = Intent(context, PagingActivity::class.java)
                                             context.startActivity(intent)
                                             (context as Activity).overridePendingTransition(
                                                 R.anim.animate_fade_enter,
@@ -702,7 +702,7 @@ class PagingActivityJP : ComponentActivity() {
                                     .clickable {
                                         if (phOrJp != "jp") {
                                             updateCountryPreference("jp")
-                                            val intent = Intent(context, JapanActivity::class.java)
+                                            val intent = Intent(context, PagingActivityJP::class.java)
                                             context.startActivity(intent)
                                             (context as Activity).overridePendingTransition(
                                                 R.anim.animate_fade_enter,

@@ -271,12 +271,6 @@ class PagingActivity : ComponentActivity() {
             input // fallback to original if parsing fails
         }
     }
-    private fun restartActivity() {
-        val intent = Intent(this, PagingActivityJP::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(intent)
-        finish()
-    }
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun PagingScreen(imageLoader: ImageLoader) {
@@ -366,57 +360,6 @@ class PagingActivity : ComponentActivity() {
                 })
             }
         }
-
-        fun updateCountryPreference(country: String) {
-            loadingCountry = country
-
-            val apiService = RetrofitClient.instance
-
-            apiService.getProfile(deviceId).enqueue(object : Callback<ProfileResponse> {
-                override fun onResponse(call: Call<ProfileResponse>, response: Response<ProfileResponse>) {
-                    loadingCountry = null
-                    if (response.isSuccessful && response.body()?.success == true) {
-                        prefs.edit().putString("phorjp", country).apply()
-
-                        if (country == "jp") {
-                            val intent = Intent(context, PagingActivityJP::class.java)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                            context.startActivity(intent)
-                        } else {
-                            restartActivity()
-                        }
-                    } else {
-                        val message = if (country == "jp") {
-                            if (currentLanguage == "ja") {
-                                "まずアークログジャパンにログインしてください"
-                            } else {
-                                "Please login first to ark log japan"
-                            }
-                        } else {
-                            if (currentLanguage == "ja") {
-                                "まずアークログフィリピンにログインしてください"
-                            } else {
-                                "Please login first to ark log philippines"
-                            }
-                        }
-                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                    }
-                }
-
-                override fun onFailure(call: Call<ProfileResponse>, t: Throwable) {
-                    loadingCountry = null
-                    val message = if (currentLanguage == "ja") {
-                        "ネットワークエラーが発生しました"
-                    } else {
-                        "Network error occurred"
-                    }
-                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                }
-            })
-        }
-
-
-
 
         fun getTranslatedText(englishText: String, japaneseText: String): String {
             return if (currentLanguage == "ja") japaneseText else englishText
@@ -668,7 +611,15 @@ class PagingActivity : ComponentActivity() {
                                     .size(40.dp)
                                     .clickable(enabled = loadingCountry == null) {
                                         if (phOrJp != "ph") {
-                                            updateCountryPreference("ph")
+                                            val editor = prefs.edit()
+                                            editor.putString("phorjp", "ph")
+                                            editor.apply()
+                                            val intent = Intent(context, PhilippineActivity::class.java)
+                                            context.startActivity(intent)
+                                            (context as Activity).overridePendingTransition(
+                                                R.anim.animate_fade_enter,
+                                                R.anim.animate_fade_exit
+                                            )
                                         }
                                     },
                                 contentAlignment = Alignment.Center
@@ -706,7 +657,15 @@ class PagingActivity : ComponentActivity() {
                                     .size(40.dp)
                                     .clickable(enabled = loadingCountry == null) {
                                         if (phOrJp != "jp") {
-                                            updateCountryPreference("jp")
+                                            val editor = prefs.edit()
+                                            editor.putString("phorjp", "jp")
+                                            editor.apply()
+                                            val intent = Intent(context, JapanActivity::class.java)
+                                            context.startActivity(intent)
+                                            (context as Activity).overridePendingTransition(
+                                                R.anim.animate_fade_enter,
+                                                R.anim.animate_fade_exit
+                                            )
                                         }
                                     },
                                 contentAlignment = Alignment.Center

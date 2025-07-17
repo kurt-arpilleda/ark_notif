@@ -253,15 +253,8 @@ class JapanActivity : ComponentActivity() {
             val isSystemInDarkTheme = isSystemInDarkTheme()
 
             Ark_notifTheme(darkTheme = isSystemInDarkTheme) {
-                if (country == null) {
-                    CountrySelectionDialog { selected ->
-                        prefs.edit { putString("phorjp", selected) }
-                        country = selected
-                    }
-                } else {
                     MainAppContent(country!!)
                 }
-            }
         }
     }
 
@@ -415,57 +408,6 @@ class JapanActivity : ComponentActivity() {
                 })
             }
         }
-
-
-        fun updateCountryPreference(country: String) {
-            loadingCountry = country
-
-            val apiService = RetrofitClientJP.instance
-
-            apiService.getProfile(deviceId).enqueue(object : Callback<ProfileResponse> {
-                override fun onResponse(call: Call<ProfileResponse>, response: Response<ProfileResponse>) {
-                    loadingCountry = null
-                    if (response.isSuccessful && response.body()?.success == true) {
-                        prefs.edit { putString("phorjp", country) }
-
-                        // Open JapanActivity if country is jp
-                        if (country == "jp") {
-                            val intent = Intent(context, JapanActivity::class.java)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                            context.startActivity(intent)
-                        } else {
-                            restartActivity()
-                        }
-                    } else {
-                        val message = if (country == "jp") {
-                            if (currentLanguage == "ja") {
-                                "まずアークログジャパンにログインしてください"
-                            } else {
-                                "Please login first to ark log japan"
-                            }
-                        } else {
-                            if (currentLanguage == "ja") {
-                                "まずアークログフィリピンにログインしてください"
-                            } else {
-                                "Please login first to ark log philippines"
-                            }
-                        }
-                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                    }
-                }
-
-                override fun onFailure(call: Call<ProfileResponse>, t: Throwable) {
-                    loadingCountry = null
-                    val message = if (currentLanguage == "ja") {
-                        "ネットワークエラーが発生しました"
-                    } else {
-                        "Network error occurred"
-                    }
-                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                }
-            })
-        }
-
 
         fun getTranslatedText(englishText: String, japaneseText: String): String {
             return if (currentLanguage == "ja") japaneseText else englishText
@@ -928,13 +870,6 @@ class JapanActivity : ComponentActivity() {
         }
     }
 
-    private fun restartActivity() {
-        val intent = Intent(this, JapanActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(intent)
-        finish()
-    }
-
     private fun registerReceiver() {
         connectivityReceiver?.let {
             try {
@@ -1076,54 +1011,6 @@ class JapanActivity : ComponentActivity() {
                 // Receiver was not registered, ignore
             }
         }
-    }
-    @Composable
-    fun CountrySelectionDialog(onCountrySelected: (String) -> Unit) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "PH or JP",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            },
-            text = {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.philippinesflag),
-                        contentDescription = "Philippines",
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clickable { onCountrySelected("ph") }
-                    )
-                    Spacer(modifier = Modifier.width(45.dp))
-                    Image(
-                        painter = painterResource(id = R.drawable.japan),
-                        contentDescription = "Japan",
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clickable { onCountrySelected("jp") }
-                    )
-                }
-            },
-            confirmButton = {},
-            containerColor = MaterialTheme.colorScheme.surface,
-            textContentColor = MaterialTheme.colorScheme.onSurface,
-            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
-        )
     }
 
     @Composable

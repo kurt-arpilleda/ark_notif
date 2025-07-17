@@ -65,7 +65,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 class PagingActivity : ComponentActivity() {
-
+    private var loadingCountry by mutableStateOf<String?>(null)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -271,7 +271,12 @@ class PagingActivity : ComponentActivity() {
             input // fallback to original if parsing fails
         }
     }
-
+    private fun restartActivity() {
+        val intent = Intent(this, PagingActivityJP::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+        finish()
+    }
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun PagingScreen(imageLoader: ImageLoader) {
@@ -363,14 +368,23 @@ class PagingActivity : ComponentActivity() {
         }
 
         fun updateCountryPreference(country: String) {
+            loadingCountry = country
+
             val apiService = RetrofitClient.instance
+
             apiService.getProfile(deviceId).enqueue(object : Callback<ProfileResponse> {
                 override fun onResponse(call: Call<ProfileResponse>, response: Response<ProfileResponse>) {
+                    loadingCountry = null
                     if (response.isSuccessful && response.body()?.success == true) {
-                        val editor = prefs.edit()
-                        editor.putString("phorjp", country)
-                        editor.apply()
-                        phOrJp = country
+                        prefs.edit().putString("phorjp", country).apply()
+
+                        if (country == "jp") {
+                            val intent = Intent(context, PagingActivityJP::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                            context.startActivity(intent)
+                        } else {
+                            restartActivity()
+                        }
                     } else {
                         val message = if (country == "jp") {
                             if (currentLanguage == "ja") {
@@ -390,6 +404,7 @@ class PagingActivity : ComponentActivity() {
                 }
 
                 override fun onFailure(call: Call<ProfileResponse>, t: Throwable) {
+                    loadingCountry = null
                     val message = if (currentLanguage == "ja") {
                         "ネットワークエラーが発生しました"
                     } else {
@@ -399,6 +414,9 @@ class PagingActivity : ComponentActivity() {
                 }
             })
         }
+
+
+
 
         fun getTranslatedText(englishText: String, japaneseText: String): String {
             return if (currentLanguage == "ja") japaneseText else englishText
@@ -648,35 +666,37 @@ class PagingActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clickable {
+                                    .clickable(enabled = loadingCountry == null) {
                                         if (phOrJp != "ph") {
                                             updateCountryPreference("ph")
-                                            val intent = Intent(context, PagingActivity::class.java)
-                                            context.startActivity(intent)
-                                            (context as Activity).overridePendingTransition(
-                                                R.anim.animate_fade_enter,
-                                                R.anim.animate_fade_exit
-                                            )
                                         }
-                                    }
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Image(
-                                    painter = rememberAsyncImagePainter(
-                                        R.drawable.philippinesflag,
-                                        imageLoader = imageLoader
-                                    ),
-                                    contentDescription = getTranslatedText("Philippines", "フィリピン"),
-                                    modifier = Modifier.fillMaxSize()
-                                )
-
-                                if (phOrJp == "ph") {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .width(40.dp)
-                                            .height(2.dp)
-                                            .background(Color.Blue)
+                                if (loadingCountry == "ph") {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.Blue,
+                                        strokeWidth = 2.dp
                                     )
+                                } else {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(
+                                            R.drawable.philippinesflag,
+                                            imageLoader = imageLoader
+                                        ),
+                                        contentDescription = getTranslatedText("Philippines", "フィリピン"),
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    if (phOrJp == "ph") {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .width(40.dp)
+                                                .height(2.dp)
+                                                .background(Color.Blue)
+                                        )
+                                    }
                                 }
                             }
 
@@ -684,35 +704,37 @@ class PagingActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clickable {
+                                    .clickable(enabled = loadingCountry == null) {
                                         if (phOrJp != "jp") {
                                             updateCountryPreference("jp")
-                                            val intent = Intent(context, PagingActivityJP::class.java)
-                                            context.startActivity(intent)
-                                            (context as Activity).overridePendingTransition(
-                                                R.anim.animate_fade_enter,
-                                                R.anim.animate_fade_exit
-                                            )
                                         }
-                                    }
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Image(
-                                    painter = rememberAsyncImagePainter(
-                                        R.drawable.japanflag,
-                                        imageLoader = imageLoader
-                                    ),
-                                    contentDescription = getTranslatedText("Japan", "日本"),
-                                    modifier = Modifier.fillMaxSize()
-                                )
-
-                                if (phOrJp == "jp") {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .width(40.dp)
-                                            .height(2.dp)
-                                            .background(Color.Blue)
+                                if (loadingCountry == "jp") {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.Blue,
+                                        strokeWidth = 2.dp
                                     )
+                                } else {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(
+                                            R.drawable.japanflag,
+                                            imageLoader = imageLoader
+                                        ),
+                                        contentDescription = getTranslatedText("Japan", "日本"),
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    if (phOrJp == "jp") {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .width(40.dp)
+                                                .height(2.dp)
+                                                .background(Color.Blue)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -780,22 +802,13 @@ class PagingActivity : ComponentActivity() {
                                 ) {
                                     Image(
                                         painter = rememberAsyncImagePainter(
-                                            if (phOrJp == "ph") R.drawable.philippinesflag else R.drawable.japanflag,
+                                            R.drawable.philippinesflag,
                                             imageLoader = imageLoader
                                         ),
-                                        contentDescription = if (phOrJp == "ph")
-                                            getTranslatedText("Philippine Flag", "フィリピン国旗")
-                                        else
-                                            getTranslatedText("Japan Flag", "日本国旗"),
+                                        contentDescription = getTranslatedText("Philippine Flag", "フィリピン国旗"),
                                         modifier = Modifier
                                             .size(40.dp)
-                                            .clickable {
-                                                // Toggle between countries with validation
-                                                val newCountry = if (phOrJp == "ph") "jp" else "ph"
-                                                updateCountryPreference(newCountry)
-                                            }
                                     )
-
                                     Spacer(modifier = Modifier.width(10.dp))
 
                                     // Department Name

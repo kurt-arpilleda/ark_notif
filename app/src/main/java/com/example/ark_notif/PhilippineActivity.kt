@@ -1,6 +1,5 @@
 package com.example.ark_notif
 
-// Add these imports to your existing imports
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity

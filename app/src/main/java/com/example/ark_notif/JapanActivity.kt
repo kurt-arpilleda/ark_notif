@@ -351,7 +351,7 @@ class JapanActivity : ComponentActivity() {
             isLoading = true
             errorMessage = null
 
-            val apiService = RetrofitClientJP.instance // Always use RetrofitClient
+            val apiService = RetrofitClientJP.instance
 
             apiService.getProfile(deviceId).enqueue(object : Callback<ProfileResponse> {
                 override fun onResponse(call: Call<ProfileResponse>, response: Response<ProfileResponse>) {
@@ -393,7 +393,7 @@ class JapanActivity : ComponentActivity() {
             currentLanguage = language
 
             employeeData?.let { employee ->
-                val apiService = RetrofitClientJP.instance // Always use RetrofitClient
+                val apiService = RetrofitClientJP.instance
 
                 apiService.updateLanguageFlag(employee.idNumber, languageFlag).enqueue(object : Callback<BasicResponse> {
                     override fun onResponse(call: Call<BasicResponse>, response: Response<BasicResponse>) {

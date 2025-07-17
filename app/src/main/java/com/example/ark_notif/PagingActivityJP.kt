@@ -158,7 +158,7 @@ class PagingActivityJP : ComponentActivity() {
 
                 // Location text
                 Text(
-                    text = if (post.location == 8 || post.location == 9) {
+                    text = if (post.location == 11 || post.location == 12) {
                         post.locationText
                     } else {
                         if (currentLanguage == "ja") "行き先: ${post.locationText}" else "Go to: ${post.locationText}"
@@ -802,7 +802,7 @@ class PagingActivityJP : ComponentActivity() {
                         isLoadingPosts = true
                         errorLoadingPosts = null
 
-                        val apiService = RetrofitClient.instance
+                        val apiService = RetrofitClientJP.instance
 
                         apiService.getPagingPosts(deviceId).enqueue(object : Callback<PagingPostsResponse> {
                             override fun onResponse(
@@ -889,7 +889,7 @@ class PagingActivityJP : ComponentActivity() {
                                         imageLoader = imageLoader,
                                         currentLanguage = currentLanguage,
                                         onAcknowledge = { pagingId, replyCode, userIndex ->
-                                            val apiService = RetrofitClient.instance
+                                            val apiService = RetrofitClientJP.instance
 
                                             apiService.updatePagingStatus(
                                                 pagingId,
@@ -930,7 +930,7 @@ class PagingActivityJP : ComponentActivity() {
                                             imageLoader = imageLoader,
                                             currentLanguage = currentLanguage,
                                             onAcknowledge = { pagingId, replyCode, userIndex ->
-                                                val apiService = RetrofitClient.instance
+                                                val apiService = RetrofitClientJP.instance
 
                                                 apiService.updatePagingStatus(
                                                     pagingId,

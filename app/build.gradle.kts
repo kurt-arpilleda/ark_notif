@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.ark_notif"
         minSdk = 24
         targetSdk = 35
-        versionCode = 21
-        versionName = "3.0"
+        versionCode = 22
+        versionName = "3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -319,15 +319,6 @@ class PhilippineActivity : ComponentActivity() {
             false
         }
     }
-    @Composable
-    fun getTranslatedText(englishText: String, japaneseText: String): String {
-        val context = LocalContext.current
-        val currentLanguage = remember {
-            context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-                .getString("languageFlag", "en") ?: "en"
-        }
-        return if (currentLanguage == "ja") japaneseText else englishText
-    }
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun MainAppContent(countryCode: String) {

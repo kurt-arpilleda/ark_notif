@@ -39,7 +39,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
-class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceChangeListener {
+    class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceChangeListener {
     private val serviceScope = CoroutineScope(Dispatchers.IO)
     private var monitoringJob: Job? = null
     private var periodicRestartJob: Job? = null
@@ -696,87 +696,122 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         updateNotification()
     }
 
-    private fun startRinging(notificationType: String?) {
-        if (isRinging) return
-
-        isRinging = true
-        sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
-
-        ringtoneJob?.cancel()
-
-        ringtoneJob = serviceScope.launch {
+        private fun openAppAutomatically(notificationType: String?) {
             try {
-                stopSilentAudio()
+                val phorjp = sharedPreferences.getString("phorjp", null)
 
-                // Setup vibration pattern
-                val pattern = longArrayOf(0, 1000, 1000)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator?.vibrate(pattern, 0)
-                }
-
-                // Prepare ringtone URI (fallback to default alarm ringtone if null or invalid)
-                val ringtoneUri = try {
-                    sharedPreferences.getString("selected_ringtone_uri", null)?.let { uriString ->
-                        Uri.parse(uriString)
-                    }?.takeIf { uri ->
-                        // Check if the URI is valid and playable
-                        val ringtone = RingtoneManager.getRingtone(this@RingMonitoringService, uri)
-                        ringtone != null
-                    } ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                } catch (e: Exception) {
-                    Log.e("RingMonitoringService", "Invalid ringtone URI, using default", e)
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                }
-
-                // Load and configure the ringtone
-                currentRingtone = withContext(Dispatchers.IO) {
-                    RingtoneManager.getRingtone(this@RingMonitoringService, ringtoneUri)?.apply {
-                        setAudioAttributes(
-                            AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_ALARM)
-                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                .build()
-                        )
-                    }
-                }
-
-                // Continuously play ringtone if not already playing
-                while (isActive && isRinging) {
-                    try {
-                        if (currentRingtone?.isPlaying != true) {
-                            currentRingtone?.play()
-                        }
-                        delay(500)
-                    } catch (e: Exception) {
-                        if (e !is CancellationException) {
-                            Log.e("RingMonitoringService", "Error maintaining ringtone", e)
-                            delay(1000)
+                // For NG notification, pass the phorjp value via intent
+                val intent = when (notificationType) {
+                    "NG" -> {
+                        packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            putExtra("phorjp", phorjp) // Pass the phorjp value
                         }
                     }
+                    "PAGING" -> {
+                        if (phorjp == "jp") {
+                            Intent(this, PagingActivityJP::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            }
+                        } else {
+                            Intent(this, PagingActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            }
+                        }
+                    }
+                    else -> null
                 }
-            } catch (e: CancellationException) {
-                currentRingtone?.stop()
-                vibrator?.cancel()
-                currentRingtone = null
-                startSilentAudio()
-                throw e
+
+                intent?.let {
+                    startActivity(it)
+                    Log.d("RingMonitoringService", "Auto-opened app for notification type: $notificationType")
+                }
             } catch (e: Exception) {
-                Log.e("RingMonitoringService", "Ringtone error", e)
-            } finally {
-                withContext(NonCancellable) {
+                Log.e("RingMonitoringService", "Failed to auto-open app", e)
+            }
+        }
+
+        private fun startRinging(notificationType: String?) {
+            if (isRinging) return
+
+            isRinging = true
+            sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
+
+            // AUTO-OPEN APP HERE
+            openAppAutomatically(notificationType)
+
+            ringtoneJob?.cancel()
+
+            ringtoneJob = serviceScope.launch {
+                try {
+                    stopSilentAudio()
+
+                    val pattern = longArrayOf(0, 1000, 1000)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator?.vibrate(pattern, 0)
+                    }
+
+                    val ringtoneUri = try {
+                        sharedPreferences.getString("selected_ringtone_uri", null)?.let { uriString ->
+                            Uri.parse(uriString)
+                        }?.takeIf { uri ->
+                            val ringtone = RingtoneManager.getRingtone(this@RingMonitoringService, uri)
+                            ringtone != null
+                        } ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    } catch (e: Exception) {
+                        Log.e("RingMonitoringService", "Invalid ringtone URI, using default", e)
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    }
+
+                    // Load and configure the ringtone
+                    currentRingtone = withContext(Dispatchers.IO) {
+                        RingtoneManager.getRingtone(this@RingMonitoringService, ringtoneUri)?.apply {
+                            setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_ALARM)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                    .build()
+                            )
+                        }
+                    }
+
+                    // Continuously play ringtone if not already playing
+                    while (isActive && isRinging) {
+                        try {
+                            if (currentRingtone?.isPlaying != true) {
+                                currentRingtone?.play()
+                            }
+                            delay(500)
+                        } catch (e: Exception) {
+                            if (e !is CancellationException) {
+                                Log.e("RingMonitoringService", "Error maintaining ringtone", e)
+                                delay(1000)
+                            }
+                        }
+                    }
+                } catch (e: CancellationException) {
                     currentRingtone?.stop()
                     vibrator?.cancel()
                     currentRingtone = null
                     startSilentAudio()
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("RingMonitoringService", "Ringtone error", e)
+                } finally {
+                    withContext(NonCancellable) {
+                        currentRingtone?.stop()
+                        vibrator?.cancel()
+                        currentRingtone = null
+                        startSilentAudio()
+                    }
                 }
             }
-        }
 
-        updateNotification()
-    }
+            updateNotification()
+        }
 
     private fun stopRinging() {
         if (!isRinging) return
@@ -816,10 +851,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Determine which app to open based on notification type and phorjp
         val contentIntent = when (notificationType) {
             "NG" -> packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("phorjp", phorjp) // Pass the phorjp value
             }
             "PAGING" -> {
                 if (phorjp == "jp") {
@@ -833,12 +868,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 }
             }
             else -> {
-                    Intent(this, MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    }
+                Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
             }
         }
-
         val contentPendingIntent = PendingIntent.getActivity(
             this,
             0,

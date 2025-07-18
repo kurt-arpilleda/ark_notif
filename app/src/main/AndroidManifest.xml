@@ -32,6 +32,7 @@
     <queries>
         <package android:name="com.example.ng_notification" />
     </queries>
+
     <application
         android:allowBackup="true"
         android:largeHeap="true"

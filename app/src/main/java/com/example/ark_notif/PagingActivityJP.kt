@@ -804,24 +804,33 @@ class PagingActivityJP : ComponentActivity() {
 
                         val apiService = RetrofitClientJP.instance
 
-                        apiService.getPagingPosts(deviceId).enqueue(object : Callback<PagingPostsResponse> {
-                            override fun onResponse(
-                                call: Call<PagingPostsResponse>,
-                                response: Response<PagingPostsResponse>
-                            ) {
-                                isLoadingPosts = false
-                                if (response.isSuccessful && response.body()?.success == true) {
-                                    pagingPosts = response.body()?.posts ?: emptyList()
-                                } else {
-                                    errorLoadingPosts = response.body()?.error ?: "Failed to load paging posts"
+                        fun fetchPagingPosts() {
+                            apiService.getPagingPosts(deviceId).enqueue(object : Callback<PagingPostsResponse> {
+                                override fun onResponse(
+                                    call: Call<PagingPostsResponse>,
+                                    response: Response<PagingPostsResponse>
+                                ) {
+                                    isLoadingPosts = false
+                                    if (response.isSuccessful && response.body()?.success == true) {
+                                        pagingPosts = response.body()?.posts ?: emptyList()
+                                    } else {
+                                        errorLoadingPosts = response.body()?.error ?: "Failed to load paging posts"
+                                    }
                                 }
-                            }
 
-                            override fun onFailure(call: Call<PagingPostsResponse>, t: Throwable) {
-                                isLoadingPosts = false
-                                errorLoadingPosts = t.message ?: "Network error occurred"
-                            }
-                        })
+                                override fun onFailure(call: Call<PagingPostsResponse>, t: Throwable) {
+                                    isLoadingPosts = false
+                                    errorLoadingPosts = t.message ?: "Network error occurred"
+                                }
+                            })
+                        }
+
+                        fetchPagingPosts()
+
+                        while (true) {
+                            delay(5000)
+                            fetchPagingPosts()
+                        }
                     }
 
                     Column(

@@ -1029,14 +1029,14 @@ class PhilippineActivity : ComponentActivity() {
                     Text(
                         text = getTranslatedText(
                             """
-                        Please do the following in your device settings:
+                        Please do the following in your device settings if existing:
                         - Enable Auto Start or App Launch for this app.
-                        - Disable or do not restrict this app in the power saving management.
+                        - Disable power saving management for apps.
                         """.trimIndent(),
                             """
-                        次の設定を端末の設定画面で行ってください:
-                        - このアプリの自動起動（またはアプリ起動）を有効にしてください。
-                        - 電池節約機能でこのアプリを制限しないでください。
+                        こちらの設定が端末に存在する場合は、次の操作を行ってください::
+                        - このアプリの「自動起動」または「アプリの起動」を有効にしてください。
+                        - アプリに対する省電力管理を無効にしてください。
                         """.trimIndent()
                         ),
                         fontSize = 16.sp,

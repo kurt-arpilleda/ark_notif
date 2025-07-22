@@ -748,7 +748,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
         wakeLock?.let { if (it.isHeld) it.release() }
 
-        // Clear cached notification
         cachedNotification = null
 
         super.onDestroy()

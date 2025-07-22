@@ -123,19 +123,15 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         super.onCreate()
         Log.d("RingMonitoringService", "Service created with device ID: $deviceId")
 
-        // Initialize SharedPreferences and register listener
         sharedPreferences = getSharedPreferences("AppPrefs", MODE_PRIVATE)
         sharedPreferences.registerOnSharedPreferenceChangeListener(this)
 
-        // Setup notification and foreground service
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
 
-        // Initialize system services
         vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
         alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
 
-        // Initialize wake lock with better configuration
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,

@@ -13,7 +13,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.media.AudioAttributes
-import android.media.MediaPlayer
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
@@ -36,16 +35,14 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
-import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceChangeListener {
     private val serviceScope = CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var monitoringJob: Job? = null
     private var periodicRestartJob: Job? = null
+    private var ringtoneLoopJob: Job? = null
     private var vibrator: Vibrator? = null
-    private var silentMediaPlayer: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     @Volatile private var isRinging = false
@@ -138,10 +135,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             "RingMonitoringService::WakeLock"
         ).apply {
             setReferenceCounted(false)
-        }
-
-        serviceScope.launch {
-            createSilentAudioFile()
         }
 
         registerAlarmReceiver()
@@ -311,63 +304,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         periodicRestartJob = null
     }
 
-    private suspend fun createSilentAudioFile() = withContext(Dispatchers.IO) {
-        try {
-            val silentFile = File(filesDir, "silent.wav")
-            if (!silentFile.exists()) {
-                val silentData = byteArrayOf(
-                    0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45,
-                    0x66, 0x6D, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
-                    0x44, 0x11, 0x00, 0x00, 0x44, 0x11, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00,
-                    0x64, 0x61, 0x74, 0x61, 0x00, 0x00, 0x00, 0x00
-                )
-                silentFile.writeBytes(silentData) // Use writeBytes instead of FileOutputStream
-            }
-        } catch (e: Exception) {
-            Log.e("RingMonitoringService", "Failed to create silent audio file", e)
-        }
-    }
-
-    private suspend fun startSilentAudio() = withContext(Dispatchers.Main) {
-        stopSilentAudio()
-
-        try {
-            val silentFile = File(filesDir, "silent.wav")
-            if (silentFile.exists()) {
-                silentMediaPlayer = MediaPlayer().apply {
-                    setDataSource(silentFile.absolutePath)
-                    setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build()
-                    )
-                    setVolume(0.0f, 0.0f)
-                    isLooping = true
-                    setWakeMode(this@RingMonitoringService, PowerManager.PARTIAL_WAKE_LOCK)
-                    prepare()
-                    start()
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("RingMonitoringService", "Failed to start silent audio", e)
-        }
-    }
-
-    private fun stopSilentAudio() {
-        silentMediaPlayer?.let { player ->
-            try {
-                if (player.isPlaying) {
-                    player.stop()
-                }
-                player.release()
-            } catch (e: Exception) {
-                Log.e("RingMonitoringService", "Error stopping silent audio", e)
-            }
-        }
-        silentMediaPlayer = null
-    }
-
     private fun startMonitoring() {
         if (isMonitoring) return
 
@@ -509,9 +445,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         serviceScope.launch {
             try {
-                stopSilentAudio()
-
-                // Vibrate pattern
+                // Vibrate pattern - continuous
                 val pattern = longArrayOf(0, 1000, 1000)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
@@ -536,7 +470,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 }
 
-                // Play ringtone in IO context
+                // Play ringtone in IO context - LOOP CONTINUOUSLY
                 currentRingtone = withContext(Dispatchers.IO) {
                     try {
                         RingtoneManager.getRingtone(this@RingMonitoringService, ringtoneUri)?.apply {
@@ -553,7 +487,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     }
                 }
 
-                currentRingtone?.play()
+                // Start continuous ringtone loop
+                startRingtoneLoop()
             } catch (e: Exception) {
                 Log.e("RingMonitoringService", "Error starting ringtone", e)
                 stopRinging()
@@ -570,18 +505,44 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         sharedPreferences.edit().remove("current_notification_type").apply()
 
         try {
+            // Stop the ringtone loop
+            ringtoneLoopJob?.cancel()
+            ringtoneLoopJob = null
+
             currentRingtone?.stop()
             vibrator?.cancel()
             currentRingtone = null
-
-            serviceScope.launch {
-                startSilentAudio()
-            }
         } catch (e: Exception) {
             Log.e("RingMonitoringService", "Error stopping ringtone", e)
         }
 
         updateNotification()
+    }
+
+    private fun startRingtoneLoop() {
+        ringtoneLoopJob?.cancel()
+        ringtoneLoopJob = serviceScope.launch {
+            try {
+                while (isActive && isRinging) {
+                    currentRingtone?.let { ringtone ->
+                        if (!ringtone.isPlaying) {
+                            withContext(Dispatchers.Main) {
+                                try {
+                                    ringtone.play()
+                                } catch (e: Exception) {
+                                    Log.e("RingMonitoringService", "Error playing ringtone in loop", e)
+                                }
+                            }
+                        }
+                    }
+                    delay(100) // Check every 100ms to restart if needed
+                }
+            } catch (e: CancellationException) {
+                // Expected when stopping
+            } catch (e: Exception) {
+                Log.e("RingMonitoringService", "Error in ringtone loop", e)
+            }
+        }
     }
 
     private fun createNotificationChannel() {
@@ -732,7 +693,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         Log.d("RingMonitoringService", "Service destroyed")
         stopMonitoring()
         stopPeriodicRestart()
-        stopSilentAudio()
         cancelAlarms()
 
         try {

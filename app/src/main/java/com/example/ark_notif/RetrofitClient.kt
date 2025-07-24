@@ -24,7 +24,7 @@ object RetrofitClient {
     private val executor = Executors.newCachedThreadPool()
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.NONE
+        level = HttpLoggingInterceptor.Level.BASIC
     }
 
     private val client = OkHttpClient.Builder()

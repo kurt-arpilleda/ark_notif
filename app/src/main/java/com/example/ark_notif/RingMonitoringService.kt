@@ -469,7 +469,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 } catch (e: Exception) {
                     RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 }
-
                 // Play ringtone in IO context - LOOP CONTINUOUSLY
                 currentRingtone = withContext(Dispatchers.IO) {
                     try {
@@ -486,7 +485,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         null
                     }
                 }
-
                 // Start continuous ringtone loop
                 startRingtoneLoop()
             } catch (e: Exception) {

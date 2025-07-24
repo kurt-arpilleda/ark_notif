@@ -270,12 +270,13 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if (key == "phorjp") {
-            Log.d("RingMonitoringService", "phorjp preference changed, restarting service")
-            // Invalidate cached notification
-            cachedNotification = null
-            lastNotificationHash = 0
-            restartService(this)
+        when (key) {
+            "phorjp", "languageFlag", "languageFlagJP" -> {
+                Log.d("RingMonitoringService", "Language preference changed, updating notification")
+                cachedNotification = null
+                lastNotificationHash = 0
+                updateNotification()
+            }
         }
     }
 
@@ -559,14 +560,20 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
     private fun createNotification(): Notification {
         val phorjp = sharedPreferences.getString("phorjp", null)
-        val isJapanese = phorjp == "jp"
+        val languageFlag = if (phorjp == "jp") {
+            sharedPreferences.getString("languageFlagJP", "ja") ?: "ja"
+        } else {
+            sharedPreferences.getString("languageFlag", "en") ?: "en"
+        }
+        val isJapanese = languageFlag == "ja"
         val notificationType = sharedPreferences.getString("current_notification_type", null)
 
-        val notificationHash = listOf(isJapanese, notificationType, isRinging, isMonitoring).hashCode()
+        val notificationHash = listOf(phorjp, languageFlag, notificationType, isRinging, isMonitoring).hashCode()
 
         if (notificationHash == lastNotificationHash && cachedNotification != null) {
             return cachedNotification!!
         }
+
         val toggleIntent = Intent(this, RingMonitoringService::class.java).apply {
             action = ACTION_TOGGLE_MONITORING
         }
@@ -652,7 +659,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             }
         }
 
-        val flagIcon = if (isJapanese) R.drawable.japan else R.drawable.philippinesflag
+        // Flag icon still based on phorjp value
+        val flagIcon = if (phorjp == "jp") R.drawable.japan else R.drawable.philippinesflag
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)

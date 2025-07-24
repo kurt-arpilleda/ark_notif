@@ -454,7 +454,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     vibrator?.vibrate(pattern, 0)
                 }
 
-                // Get ringtone with better error handling
                 val ringtoneUri = try {
                     sharedPreferences.getString("selected_ringtone_uri", null)?.let { uriString ->
                         Uri.parse(uriString)

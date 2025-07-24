@@ -147,7 +147,7 @@ class PagingActivityJP : ComponentActivity() {
                         )
 
                         Text(
-                            text = formatDateTime(post.dateTime),
+                            text = formatDateTime(post.dateTime, currentLanguage),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -261,14 +261,20 @@ class PagingActivityJP : ComponentActivity() {
         }
     }
 
-    fun formatDateTime(input: String): String {
+    fun formatDateTime(input: String, currentLanguage: String): String {
         return try {
             val inputFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             val date = inputFormat.parse(input)
-            val outputFormat = SimpleDateFormat("MMM d, yyyy hh:mm a", Locale.getDefault())
-            outputFormat.format(date ?: input)
+
+            if (currentLanguage == "ja") {
+                val outputFormat = SimpleDateFormat("yyyy年MM月dd日 HH時mm分", Locale.JAPAN)
+                outputFormat.format(date ?: input)
+            } else {
+                val outputFormat = SimpleDateFormat("MMM d, yyyy hh:mm a", Locale.getDefault())
+                outputFormat.format(date ?: input)
+            }
         } catch (e: Exception) {
-            input // fallback to original if parsing fails
+            input
         }
     }
     @OptIn(ExperimentalMaterial3Api::class)

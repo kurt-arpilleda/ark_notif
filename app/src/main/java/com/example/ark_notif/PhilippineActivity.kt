@@ -1031,12 +1031,12 @@ class PhilippineActivity : ComponentActivity() {
                             """
                         Please do the following in your device settings if existing:
                         - Enable Auto Start or App Launch for this app.
-                        - Disable power saving management for apps.
+                        - Disable power saving management for apps or battery saver on settings.
                         """.trimIndent(),
                             """
                         こちらの設定が端末に存在する場合は、次の操作を行ってください::
                         - このアプリの「自動起動」または「アプリの起動」を有効にしてください。
-                        - アプリに対する省電力管理を無効にしてください。
+                        -「設定」からアプリの省電力管理やバッテリーセーバーを無効にしてください。
                         """.trimIndent()
                         ),
                         fontSize = 16.sp,

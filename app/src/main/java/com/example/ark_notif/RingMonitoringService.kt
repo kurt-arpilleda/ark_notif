@@ -54,14 +54,13 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private var alarmPendingIntent: PendingIntent? = null
     private var heartbeatPendingIntent: PendingIntent? = null
 
-    // Battery optimization: Reduced intervals and smarter wake lock usage
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
         private const val NOTIFICATION_ID = 1234
-        private const val MONITORING_INTERVAL = 8_000L // Increased to 8s (was 5s)
-        private const val RESTART_INTERVAL = 600_000L // Increased to 10m (was 6m)
-        private const val ALARM_INTERVAL = 900_000L // Increased to 15m (was 10m)
-        private const val HEARTBEAT_INTERVAL = 600_000L // Increased to 10m (was 5m)
+        private const val MONITORING_INTERVAL = 8_000L
+        private const val RESTART_INTERVAL = 600_000L
+        private const val ALARM_INTERVAL = 900_000L
+        private const val HEARTBEAT_INTERVAL = 600_000L
         private const val ALARM_REQUEST_CODE = 9876
         private const val HEARTBEAT_REQUEST_CODE = 9877
         const val ACTION_START_MONITORING = "START_MONITORING"
@@ -390,11 +389,14 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if (key == "phorjp") {
-            Log.d("RingMonitoringService", "phorjp preference changed, restarting service")
-            restartService(this)
+        when (key) {
+            "phorjp", "languageFlag", "languageFlagJP" -> {
+                Log.d("RingMonitoringService", "Language preference changed, updating notification")
+                updateNotification()
+            }
         }
     }
+
 
     private fun startPeriodicRestart() {
         if (periodicRestartJob?.isActive == true) return
@@ -668,7 +670,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
     private fun createNotification(): Notification {
         val phorjp = sharedPreferences.getString("phorjp", null)
-        val isJapanese = phorjp == "jp"
+        val isJapanese = when (phorjp) {
+            "ph" -> sharedPreferences.getString("languageFlag", "en") == "ja"
+            "jp" -> sharedPreferences.getString("languageFlagJP", "ja") == "ja"
+            else -> false
+        }
+
         val notificationType = sharedPreferences.getString("current_notification_type", null)
 
         val toggleIntent = Intent(this, RingMonitoringService::class.java).apply {
@@ -756,7 +763,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             }
         }
 
-        val flagIcon = if (isJapanese) R.drawable.japan else R.drawable.philippinesflag
+        val flagIcon = when (phorjp) {
+            "ph" -> R.drawable.philippinesflag
+            "jp" -> R.drawable.japan
+            else -> R.drawable.ic_ring_active
+        }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)

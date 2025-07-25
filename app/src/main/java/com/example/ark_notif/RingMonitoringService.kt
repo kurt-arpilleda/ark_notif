@@ -387,16 +387,22 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         heartbeatJob?.cancel()
         heartbeatJob = null
     }
-
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            "phorjp", "languageFlag", "languageFlagJP" -> {
+            "phorjp" -> {
+                Log.d("RingMonitoringService", "phorjp preference changed, restarting monitoring")
+                if (isMonitoring) {
+                    stopMonitoring()
+                    startMonitoring()
+                }
+                updateNotification()
+            }
+            "languageFlag", "languageFlagJP" -> {
                 Log.d("RingMonitoringService", "Language preference changed, updating notification")
                 updateNotification()
             }
         }
     }
-
 
     private fun startPeriodicRestart() {
         if (periodicRestartJob?.isActive == true) return

@@ -13,8 +13,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.media.AudioAttributes
-import android.media.AudioManager
-import android.media.MediaPlayer
+import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
@@ -30,7 +29,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -39,43 +37,44 @@ import kotlin.coroutines.cancellation.CancellationException
 import java.util.concurrent.TimeUnit
 
 class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceChangeListener {
-    private val serviceScope = CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+    private val serviceScope = CoroutineScope(Dispatchers.IO)
     private var monitoringJob: Job? = null
     private var periodicRestartJob: Job? = null
+    private var heartbeatJob: Job? = null
     private var vibrator: Vibrator? = null
     private var wakeLock: PowerManager.WakeLock? = null
-
-    @Volatile private var isRinging = false
-    @Volatile private var isMonitoring = false
-
-    // Replace Ringtone with MediaPlayer
-    private var mediaPlayer: MediaPlayer? = null
-    private val deviceId: String by lazy { retrieveDeviceId() }
+    private var isRinging = false
+    private var isMonitoring = false
+    private var isServiceActive = true
+    private var ringtoneJob: Job? = null
+    private var currentRingtone: Ringtone? = null
+    private var deviceId: String = "unknown-device"
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var alarmManager: AlarmManager
     private var alarmPendingIntent: PendingIntent? = null
+    private var heartbeatPendingIntent: PendingIntent? = null
 
-    private var cachedNotification: Notification? = null
-    private var lastNotificationHash: Int = 0
-
+    // Battery optimization: Reduced intervals and smarter wake lock usage
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
         private const val NOTIFICATION_ID = 1234
-        private const val MONITORING_INTERVAL = 7_000L
-        private const val RESTART_INTERVAL = 600_000L // 10m
-        private const val ALARM_INTERVAL = 900_000L // 15m
+        private const val MONITORING_INTERVAL = 8_000L // Increased to 8s (was 5s)
+        private const val RESTART_INTERVAL = 600_000L // Increased to 10m (was 6m)
+        private const val ALARM_INTERVAL = 900_000L // Increased to 15m (was 10m)
+        private const val HEARTBEAT_INTERVAL = 600_000L // Increased to 10m (was 5m)
         private const val ALARM_REQUEST_CODE = 9876
-        private const val WAKELOCK_TIMEOUT = 30_000L // 30 seconds
-
+        private const val HEARTBEAT_REQUEST_CODE = 9877
         const val ACTION_START_MONITORING = "START_MONITORING"
         const val ACTION_STOP_MONITORING = "STOP_MONITORING"
         const val ACTION_TOGGLE_MONITORING = "TOGGLE_MONITORING"
         const val ACTION_RESTART_SERVICE = "RESTART_SERVICE"
         const val ACTION_ALARM_TRIGGER = "ALARM_TRIGGER"
+        const val ACTION_HEARTBEAT = "HEARTBEAT"
 
         fun startService(context: Context) {
             val intent = Intent(context, RingMonitoringService::class.java).apply {
                 action = ACTION_START_MONITORING
+                putExtra("timestamp", System.currentTimeMillis())
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -108,7 +107,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         return try {
             Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown-device"
         } catch (e: Exception) {
-            Log.e("RingMonitoringService", "Error getting device identifier", e)
+            Log.e("RingMonitoringService", "Error getting device identifier: ${e.message}", e)
             "unknown-device"
         }
     }
@@ -119,6 +118,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     @SuppressLint("ForegroundServiceType", "WakelockTimeout")
     override fun onCreate() {
         super.onCreate()
+        deviceId = retrieveDeviceId()
         Log.d("RingMonitoringService", "Service created with device ID: $deviceId")
 
         sharedPreferences = getSharedPreferences("AppPrefs", MODE_PRIVATE)
@@ -130,6 +130,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
         alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
 
+        // Battery optimization: Only acquire wake lock when needed
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
@@ -138,6 +139,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             setReferenceCounted(false)
         }
 
+        startPeriodicRestart()
+        startHeartbeat()
         registerAlarmReceiver()
     }
 
@@ -145,6 +148,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private fun registerAlarmReceiver() {
         val filter = IntentFilter().apply {
             addAction(ACTION_ALARM_TRIGGER)
+            addAction(ACTION_HEARTBEAT)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -164,7 +168,74 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     }
                     scheduleNextAlarm()
                 }
+                ACTION_HEARTBEAT -> {
+                    Log.d("RingMonitoringService", "Heartbeat triggered")
+                    handleHeartbeat()
+                    scheduleNextHeartbeat()
+                }
             }
+        }
+    }
+
+    private fun startHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = serviceScope.launch {
+            while (isActive && isServiceActive) {
+                try {
+                    delay(HEARTBEAT_INTERVAL)
+                    if (isMonitoring) {
+                        Log.d("RingMonitoringService", "Heartbeat: Monitoring is active")
+                        // Only refresh wake lock if we're actually ringing
+                        if (isRinging) {
+                            refreshWakeLock()
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("RingMonitoringService", "Heartbeat error", e)
+                }
+            }
+        }
+        scheduleNextHeartbeat()
+    }
+
+    private fun handleHeartbeat() {
+        if (!isMonitoring) {
+            Log.w("RingMonitoringService", "Heartbeat detected monitoring stopped, restarting")
+            startMonitoring()
+        }
+
+        // Only refresh wake lock if we're ringing
+        if (isRinging) {
+            refreshWakeLock()
+        }
+    }
+
+    private fun refreshWakeLock() {
+        try {
+            wakeLock?.let { wl ->
+                if (!wl.isHeld) {
+                    // Battery optimization: Shorter wake lock duration
+                    wl.acquire(60 * 1000L /*1 minute*/)
+                    Log.d("RingMonitoringService", "Wake lock acquired for ringing")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("RingMonitoringService", "Error refreshing wake lock", e)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let { wl ->
+                if (wl.isHeld) {
+                    wl.release()
+                    Log.d("RingMonitoringService", "Wake lock released")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("RingMonitoringService", "Error releasing wake lock", e)
         }
     }
 
@@ -183,31 +254,56 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val triggerTime = System.currentTimeMillis() + ALARM_INTERVAL
 
         try {
-            when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> {
-                    alarmManager.setAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        triggerTime,
-                        alarmPendingIntent!!
-                    )
-                }
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        triggerTime,
-                        alarmPendingIntent!!
-                    )
-                }
-                else -> {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        triggerTime,
-                        alarmPendingIntent!!
-                    )
-                }
+            // Battery optimization: Use less aggressive scheduling
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    alarmPendingIntent!!
+                )
+            } else {
+                alarmManager.set(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    alarmPendingIntent!!
+                )
             }
+            Log.d("RingMonitoringService", "Next alarm scheduled in ${TimeUnit.MILLISECONDS.toMinutes(ALARM_INTERVAL)} minutes")
         } catch (e: Exception) {
             Log.e("RingMonitoringService", "Failed to schedule alarm", e)
+        }
+    }
+
+    private fun scheduleNextHeartbeat() {
+        val heartbeatIntent = Intent(this, RingMonitoringService::class.java).apply {
+            action = ACTION_HEARTBEAT
+        }
+
+        heartbeatPendingIntent = PendingIntent.getService(
+            this,
+            HEARTBEAT_REQUEST_CODE,
+            heartbeatIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val triggerTime = System.currentTimeMillis() + HEARTBEAT_INTERVAL
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    heartbeatPendingIntent!!
+                )
+            } else {
+                alarmManager.set(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    heartbeatPendingIntent!!
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("RingMonitoringService", "Failed to schedule heartbeat", e)
         }
     }
 
@@ -216,90 +312,109 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             alarmManager.cancel(it)
             alarmPendingIntent = null
         }
+        heartbeatPendingIntent?.let {
+            alarmManager.cancel(it)
+            heartbeatPendingIntent = null
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        when (action) {
-            ACTION_START_MONITORING -> {
-                Log.d("RingMonitoringService", "Received start command")
-                if (!isMonitoring) {
-                    startMonitoring()
-                    scheduleNextAlarm()
+        intent?.action?.let { action ->
+            when (action) {
+                ACTION_START_MONITORING -> {
+                    Log.d("RingMonitoringService", "Received start command")
+                    if (!isMonitoring) {
+                        startMonitoring()
+                        scheduleNextAlarm()
+                        scheduleNextHeartbeat()
+                    }
                 }
-            }
-            ACTION_STOP_MONITORING -> {
-                Log.d("RingMonitoringService", "Received stop command")
-                stopMonitoring()
-                stopPeriodicRestart()
-                cancelAlarms()
-                stopSelf()
-            }
-            ACTION_TOGGLE_MONITORING -> {
-                Log.d("RingMonitoringService", "Received toggle command")
-                if (isMonitoring) {
+                ACTION_STOP_MONITORING -> {
+                    Log.d("RingMonitoringService", "Received stop command")
                     stopMonitoring()
                     stopPeriodicRestart()
+                    stopHeartbeat()
                     cancelAlarms()
-                } else {
+                    releaseWakeLock()
+                    stopSelf()
+                }
+                ACTION_TOGGLE_MONITORING -> {
+                    Log.d("RingMonitoringService", "Received toggle command")
+                    if (isMonitoring) {
+                        stopMonitoring()
+                        stopPeriodicRestart()
+                        stopHeartbeat()
+                        cancelAlarms()
+                        releaseWakeLock()
+                    } else {
+                        startMonitoring()
+                        startPeriodicRestart()
+                        startHeartbeat()
+                        scheduleNextAlarm()
+                        scheduleNextHeartbeat()
+                    }
+                    updateNotification()
+                }
+                ACTION_RESTART_SERVICE -> {
+                    Log.d("RingMonitoringService", "Received restart command")
+                    stopMonitoring()
                     startMonitoring()
+                    updateNotification()
+                }
+                ACTION_ALARM_TRIGGER -> {
+                    Log.d("RingMonitoringService", "Received alarm trigger")
+                    if (!isMonitoring) {
+                        startMonitoring()
+                    }
                     scheduleNextAlarm()
                 }
-                updateNotification()
+                ACTION_HEARTBEAT -> {
+                    Log.d("RingMonitoringService", "Received heartbeat")
+                    handleHeartbeat()
+                    scheduleNextHeartbeat()
+                }
             }
-            ACTION_RESTART_SERVICE -> {
-                Log.d("RingMonitoringService", "Received restart command")
-                // Ensure clean restart by stopping everything first
-                cleanupMediaPlayer()
-                stopRinging()
-                stopMonitoring()
+        } ?: run {
+            if (!isMonitoring) {
                 startMonitoring()
-                updateNotification()
-            }
-            ACTION_ALARM_TRIGGER -> {
-                Log.d("RingMonitoringService", "Received alarm trigger")
-                if (!isMonitoring) {
-                    startMonitoring()
-                }
                 scheduleNextAlarm()
-            }
-            null -> {
-                if (!isMonitoring) {
-                    startMonitoring()
-                    scheduleNextAlarm()
-                }
+                scheduleNextHeartbeat()
             }
         }
         return START_STICKY
     }
 
+    private fun stopHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
+    }
+
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        when (key) {
-            "phorjp", "languageFlag", "languageFlagJP" -> {
-                Log.d("RingMonitoringService", "Language preference changed, updating notification")
-                cachedNotification = null
-                lastNotificationHash = 0
-                updateNotification()
-            }
+        if (key == "phorjp") {
+            Log.d("RingMonitoringService", "phorjp preference changed, restarting service")
+            restartService(this)
         }
     }
 
     private fun startPeriodicRestart() {
-        periodicRestartJob?.cancel()
+        if (periodicRestartJob?.isActive == true) return
+
         periodicRestartJob = serviceScope.launch {
             try {
-                while (isActive) {
+                while (isActive && isServiceActive) {
                     delay(RESTART_INTERVAL)
-                    if (isActive && isMonitoring) {
+
+                    if (isActive && isServiceActive && isMonitoring) {
                         Log.d("RingMonitoringService", "Performing periodic monitoring restart")
-                        // Clean restart - stop everything properly
-                        cleanupMediaPlayer()
-                        stopRinging()
+
                         stopMonitoring()
                         startMonitoring()
+
+                        Log.d("RingMonitoringService", "Periodic restart completed successfully.")
                     }
                 }
             } catch (e: CancellationException) {
+                Log.d("RingMonitoringService", "Periodic restart job cancelled")
                 throw e
             } catch (e: Exception) {
                 Log.e("RingMonitoringService", "Error in periodic restart", e)
@@ -325,11 +440,13 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
                 while (isActive) {
                     try {
-                        // Acquire wake lock only during network operations
-                        wakeLock?.acquire(WAKELOCK_TIMEOUT)
+                        // Battery optimization: Only acquire wake lock during network calls
+                        val shouldAcquireWakeLock = !isRinging
+                        if (shouldAcquireWakeLock) {
+                            wakeLock?.acquire(30 * 1000L /*30 seconds for network call*/)
+                        }
 
-                        // Use async for concurrent API calls - major optimization!
-                        val ringResponseDeferred = async {
+                        val ringResponse = withContext(Dispatchers.IO) {
                             if (phorjp == "jp") {
                                 RetrofitClientJP.instance.getRingStatus(deviceId).execute()
                             } else {
@@ -337,54 +454,54 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                             }
                         }
 
-                        val pagingResponseDeferred = async {
+                        val pagingResponse = withContext(Dispatchers.IO) {
                             if (phorjp == "jp") {
                                 RetrofitClientJP.instance.getPagingStatus(deviceId).execute()
                             } else {
                                 RetrofitClient.instance.getPagingStatus(deviceId).execute()
                             }
                         }
-                        val ringResponse = ringResponseDeferred.await()
-                        val pagingResponse = pagingResponseDeferred.await()
 
-                        wakeLock?.let { if (it.isHeld) it.release() }
+                        // Release wake lock after network calls
+                        if (shouldAcquireWakeLock) {
+                            releaseWakeLock()
+                        }
 
                         val ringStatus = ringResponse.body()
                         val pagingStatus = pagingResponse.body()
 
                         val shouldRing = (ringStatus?.shouldRing == true) || (pagingStatus?.shouldRing == true)
+
                         val notificationType = when {
                             pagingStatus?.shouldRing == true -> pagingStatus.type
                             ringStatus?.shouldRing == true -> ringStatus.type
                             else -> null
                         }
 
-                        val currentType = sharedPreferences.getString("current_notification_type", null)
-                        if (currentType != notificationType) {
-                            if (notificationType != null) {
-                                sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
-                            } else {
-                                sharedPreferences.edit().remove("current_notification_type").apply()
-                            }
-
-                            withContext(Dispatchers.Main) {
-                                updateNotification()
-                            }
+                        if (notificationType != null) {
+                            sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
+                        } else {
+                            sharedPreferences.edit().remove("current_notification_type").apply()
                         }
 
-                        when {
-                            shouldRing && !isRinging -> {
-                                Log.d("RingMonitoringService", "Starting ring")
-                                startRinging(notificationType)
-                            }
-                            !shouldRing && isRinging -> {
-                                Log.d("RingMonitoringService", "Stopping ring")
-                                stopRinging()
-                            }
+                        withContext(Dispatchers.Main) {
+                            updateNotification()
+                        }
+
+                        if (shouldRing && !isRinging) {
+                            Log.d("RingMonitoringService", "Starting ring")
+                            startRinging(notificationType)
+                        } else if (!shouldRing && isRinging) {
+                            Log.d("RingMonitoringService", "Stopping ring")
+                            stopRinging()
                         }
                     } catch (e: Exception) {
-                        Log.e("RingMonitoringService", "Monitoring error", e)
-                        wakeLock?.let { if (it.isHeld) it.release() }
+                        if (isActive) {
+                            Log.e("RingMonitoringService", "Monitoring error", e)
+                        }
+                        // Release wake lock on error
+                        releaseWakeLock()
+                        delay(10000) // Longer delay on error to prevent battery drain
                     }
                     delay(MONITORING_INTERVAL)
                 }
@@ -392,12 +509,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 withContext(NonCancellable) {
                     stopRinging()
                     isMonitoring = false
-                    wakeLock?.let { if (it.isHeld) it.release() }
+                    releaseWakeLock()
                 }
             }
         }
 
-        startPeriodicRestart()
         updateNotification()
     }
 
@@ -405,15 +521,15 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         isMonitoring = false
         monitoringJob?.cancel()
         monitoringJob = null
-        stopPeriodicRestart()
         stopRinging()
-        wakeLock?.let { if (it.isHeld) it.release() }
+        releaseWakeLock()
         updateNotification()
     }
 
     private fun openAppAutomatically(notificationType: String?) {
         try {
             val phorjp = sharedPreferences.getString("phorjp", null)
+
             val intent = when (notificationType) {
                 "NG" -> {
                     packageManager.getLaunchIntentForPackage("com.example.ng_notification")?.apply {
@@ -437,6 +553,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
             intent?.let {
                 startActivity(it)
+                Log.d("RingMonitoringService", "Auto-opened app for notification type: $notificationType")
             }
         } catch (e: Exception) {
             Log.e("RingMonitoringService", "Failed to auto-open app", e)
@@ -444,160 +561,94 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     }
 
     private fun startRinging(notificationType: String?) {
-        // Prevent multiple simultaneous rings
-        if (isRinging) {
-            Log.d("RingMonitoringService", "Already ringing, ignoring duplicate start request")
-            return
-        }
+        if (isRinging) return
 
         isRinging = true
         sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
 
+        // Acquire wake lock for ringing
+        refreshWakeLock()
+
+        // AUTO-OPEN APP HERE
         openAppAutomatically(notificationType)
 
-        serviceScope.launch {
+        ringtoneJob?.cancel()
+
+        ringtoneJob = serviceScope.launch {
             try {
-                // Start vibration
-                startVibration()
+                val pattern = longArrayOf(0, 1000, 1000)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(pattern, 0)
+                }
 
-                // Start audio with MediaPlayer
-                startMediaPlayerRingtone()
+                val ringtoneUri = try {
+                    sharedPreferences.getString("selected_ringtone_uri", null)?.let { uriString ->
+                        Uri.parse(uriString)
+                    }?.takeIf { uri ->
+                        val ringtone = RingtoneManager.getRingtone(this@RingMonitoringService, uri)
+                        ringtone != null
+                    } ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                } catch (e: Exception) {
+                    Log.e("RingMonitoringService", "Invalid ringtone URI, using default", e)
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                }
 
+                currentRingtone = withContext(Dispatchers.IO) {
+                    RingtoneManager.getRingtone(this@RingMonitoringService, ringtoneUri)?.apply {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build()
+                        )
+                    }
+                }
+
+                while (isActive && isRinging) {
+                    try {
+                        if (currentRingtone?.isPlaying != true) {
+                            currentRingtone?.play()
+                        }
+                        delay(500)
+                    } catch (e: Exception) {
+                        if (e !is CancellationException) {
+                            Log.e("RingMonitoringService", "Error maintaining ringtone", e)
+                            delay(1000)
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                currentRingtone?.stop()
+                vibrator?.cancel()
+                currentRingtone = null
+                releaseWakeLock()
+                throw e
             } catch (e: Exception) {
-                Log.e("RingMonitoringService", "Error starting ringtone", e)
-                stopRinging()
+                Log.e("RingMonitoringService", "Ringtone error", e)
+            } finally {
+                withContext(NonCancellable) {
+                    currentRingtone?.stop()
+                    vibrator?.cancel()
+                    currentRingtone = null
+                    releaseWakeLock()
+                }
             }
         }
 
         updateNotification()
-    }
-
-    private fun startVibration() {
-        try {
-            // Vibrate pattern - continuous
-            val pattern = longArrayOf(0, 1000, 1000)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator?.vibrate(pattern, 0)
-            }
-        } catch (e: Exception) {
-            Log.e("RingMonitoringService", "Error starting vibration", e)
-        }
-    }
-
-    private fun startMediaPlayerRingtone() {
-        // Clean up any existing MediaPlayer first
-        cleanupMediaPlayer()
-
-        try {
-            val ringtoneUri = getRingtoneUri()
-
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .setLegacyStreamType(AudioManager.STREAM_ALARM)
-                        .build()
-                )
-
-                setDataSource(this@RingMonitoringService, ringtoneUri)
-                isLooping = true // Enable looping directly
-
-                setOnPreparedListener { mp ->
-                    try {
-                        if (isRinging) { // Check if we still need to ring
-                            mp.start()
-                            Log.d("RingMonitoringService", "MediaPlayer started successfully")
-                        }
-                    } catch (e: Exception) {
-                        Log.e("RingMonitoringService", "Error starting MediaPlayer", e)
-                    }
-                }
-
-                setOnErrorListener { mp, what, extra ->
-                    Log.e("RingMonitoringService", "MediaPlayer error: what=$what, extra=$extra")
-                    cleanupMediaPlayer()
-                    false
-                }
-
-                setOnCompletionListener { mp ->
-                    // This shouldn't be called due to looping, but handle it just in case
-                    Log.d("RingMonitoringService", "MediaPlayer completed unexpectedly")
-                    if (isRinging) {
-                        try {
-                            mp.start()
-                        } catch (e: Exception) {
-                            Log.e("RingMonitoringService", "Error restarting MediaPlayer", e)
-                        }
-                    }
-                }
-
-                prepareAsync() // Prepare asynchronously
-            }
-
-        } catch (e: Exception) {
-            Log.e("RingMonitoringService", "Error setting up MediaPlayer", e)
-            cleanupMediaPlayer()
-        }
-    }
-
-    private fun getRingtoneUri(): Uri {
-        return try {
-            sharedPreferences.getString("selected_ringtone_uri", null)?.let { uriString ->
-                Uri.parse(uriString)
-            }?.takeIf { uri ->
-                try {
-                    // Test if the URI is valid
-                    contentResolver.openInputStream(uri)?.close()
-                    true
-                } catch (e: Exception) {
-                    Log.w("RingMonitoringService", "Custom ringtone URI invalid, using default", e)
-                    false
-                }
-            } ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-        } catch (e: Exception) {
-            Log.e("RingMonitoringService", "Error getting ringtone URI, using default", e)
-            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-        }
     }
 
     private fun stopRinging() {
         if (!isRinging) return
 
-        Log.d("RingMonitoringService", "Stopping ring")
         isRinging = false
         sharedPreferences.edit().remove("current_notification_type").apply()
-
-        try {
-            // Stop vibration
-            vibrator?.cancel()
-
-            // Stop and cleanup MediaPlayer
-            cleanupMediaPlayer()
-
-        } catch (e: Exception) {
-            Log.e("RingMonitoringService", "Error stopping ringtone", e)
-        }
-
+        ringtoneJob?.cancel()
+        releaseWakeLock()
         updateNotification()
-    }
-
-    private fun cleanupMediaPlayer() {
-        mediaPlayer?.let { mp ->
-            try {
-                if (mp.isPlaying) {
-                    mp.stop()
-                }
-                mp.reset()
-                mp.release()
-            } catch (e: Exception) {
-                Log.e("RingMonitoringService", "Error cleaning up MediaPlayer", e)
-            }
-        }
-        mediaPlayer = null
     }
 
     private fun createNotificationChannel() {
@@ -617,19 +668,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
     private fun createNotification(): Notification {
         val phorjp = sharedPreferences.getString("phorjp", null)
-        val languageFlag = if (phorjp == "jp") {
-            sharedPreferences.getString("languageFlagJP", "ja") ?: "ja"
-        } else {
-            sharedPreferences.getString("languageFlag", "en") ?: "en"
-        }
-        val isJapanese = languageFlag == "ja"
+        val isJapanese = phorjp == "jp"
         val notificationType = sharedPreferences.getString("current_notification_type", null)
-
-        val notificationHash = listOf(phorjp, languageFlag, notificationType, isRinging, isMonitoring).hashCode()
-
-        if (notificationHash == lastNotificationHash && cachedNotification != null) {
-            return cachedNotification!!
-        }
 
         val toggleIntent = Intent(this, RingMonitoringService::class.java).apply {
             action = ACTION_TOGGLE_MONITORING
@@ -674,12 +714,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             when (notificationType) {
                 "NG" -> Triple(
                     "NGレポート",
-                    if (isRinging) "🔊 鳴っています - タップして表示" else "📡 監視中",
+                    "🔊 鳴っています - タップして表示",
                     if (isMonitoring) "監視を停止" else "監視を開始"
                 )
                 "PAGING" -> Triple(
                     "注意：呼び出されています！",
-                    if (isRinging) "🔊 鳴っています - タップして表示" else "📡 監視中",
+                    "🔊 鳴っています - タップして表示",
                     if (isMonitoring) "監視を停止" else "監視を開始"
                 )
                 else -> Triple(
@@ -696,12 +736,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             when (notificationType) {
                 "NG" -> Triple(
                     "NG Report",
-                    if (isRinging) "🔊 RINGING - Tap to view" else "📡 Monitoring",
+                    "🔊 RINGING - Tap to view",
                     if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
                 )
                 "PAGING" -> Triple(
                     "Attention: You're being paged!",
-                    if (isRinging) "🔊 RINGING - Tap to view" else "📡 Monitoring",
+                    "🔊 RINGING - Tap to view",
                     if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
                 )
                 else -> Triple(
@@ -716,10 +756,9 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             }
         }
 
-        // Flag icon still based on phorjp value
-        val flagIcon = if (phorjp == "jp") R.drawable.japan else R.drawable.philippinesflag
+        val flagIcon = if (isJapanese) R.drawable.japan else R.drawable.philippinesflag
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(statusText)
             .setSmallIcon(R.drawable.ic_ring_active)
@@ -738,14 +777,15 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 .setShowActionsInCompactView(0)
             )
             .build()
-
-        cachedNotification = notification
-        lastNotificationHash = notificationHash
-
-        return notification
     }
 
     private fun updateNotification() {
+        if (monitoringJob?.isActive == true && !isMonitoring) {
+            isMonitoring = true
+        } else if (monitoringJob?.isActive != true && isMonitoring) {
+            isMonitoring = false
+        }
+
         val notification = createNotification()
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, notification)
@@ -753,24 +793,17 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
     override fun onDestroy() {
         Log.d("RingMonitoringService", "Service destroyed")
+        isServiceActive = false
         stopMonitoring()
         stopPeriodicRestart()
         cancelAlarms()
-
-        // Clean up MediaPlayer
-        cleanupMediaPlayer()
-
+        releaseWakeLock()
         try {
             unregisterReceiver(alarmReceiver)
         } catch (e: IllegalArgumentException) {
             Log.w("RingMonitoringService", "Receiver not registered", e)
         }
-
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
-        wakeLock?.let { if (it.isHeld) it.release() }
-
-        cachedNotification = null
-
         super.onDestroy()
     }
 }

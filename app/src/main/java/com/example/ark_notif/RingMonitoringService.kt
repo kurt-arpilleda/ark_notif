@@ -129,7 +129,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
         alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
 
-        // Battery optimization: Only acquire wake lock when needed
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
@@ -184,7 +183,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     delay(HEARTBEAT_INTERVAL)
                     if (isMonitoring) {
                         Log.d("RingMonitoringService", "Heartbeat: Monitoring is active")
-                        // Only refresh wake lock if we're actually ringing
                         if (isRinging) {
                             refreshWakeLock()
                         }
@@ -205,7 +203,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             startMonitoring()
         }
 
-        // Only refresh wake lock if we're ringing
         if (isRinging) {
             refreshWakeLock()
         }
@@ -215,8 +212,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         try {
             wakeLock?.let { wl ->
                 if (!wl.isHeld) {
-                    // Battery optimization: Shorter wake lock duration
-                    wl.acquire(60 * 1000L /*1 minute*/)
+                    wl.acquire(60 * 1000L)
                     Log.d("RingMonitoringService", "Wake lock acquired for ringing")
                 }
             }
@@ -253,7 +249,6 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val triggerTime = System.currentTimeMillis() + ALARM_INTERVAL
 
         try {
-            // Battery optimization: Use less aggressive scheduling
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
@@ -448,10 +443,9 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
                 while (isActive) {
                     try {
-                        // Battery optimization: Only acquire wake lock during network calls
                         val shouldAcquireWakeLock = !isRinging
                         if (shouldAcquireWakeLock) {
-                            wakeLock?.acquire(30 * 1000L /*30 seconds for network call*/)
+                            wakeLock?.acquire(30 * 1000L)
                         }
 
                         val ringResponse = withContext(Dispatchers.IO) {
@@ -470,19 +464,30 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                             }
                         }
 
-                        // Release wake lock after network calls
+                        val jobOrderResponse = withContext(Dispatchers.IO) {
+                            if (phorjp == "jp") {
+                                RetrofitClientJP.instance.getJobOrderStatus(deviceId).execute()
+                            } else {
+                                RetrofitClient.instance.getJobOrderStatus(deviceId).execute()
+                            }
+                        }
+
                         if (shouldAcquireWakeLock) {
                             releaseWakeLock()
                         }
 
                         val ringStatus = ringResponse.body()
                         val pagingStatus = pagingResponse.body()
+                        val jobOrderStatus = jobOrderResponse.body()
 
-                        val shouldRing = (ringStatus?.shouldRing == true) || (pagingStatus?.shouldRing == true)
+                        val shouldRing = (pagingStatus?.shouldRing == true) ||
+                                (ringStatus?.shouldRing == true) ||
+                                (jobOrderStatus?.shouldRing == true)
 
                         val notificationType = when {
                             pagingStatus?.shouldRing == true -> pagingStatus.type
                             ringStatus?.shouldRing == true -> ringStatus.type
+                            jobOrderStatus?.shouldRing == true -> jobOrderStatus.type
                             else -> null
                         }
 
@@ -507,9 +512,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         if (isActive) {
                             Log.e("RingMonitoringService", "Monitoring error", e)
                         }
-                        // Release wake lock on error
                         releaseWakeLock()
-                        delay(10000) // Longer delay on error to prevent battery drain
+                        delay(10000)
                     }
                     delay(MONITORING_INTERVAL)
                 }
@@ -556,6 +560,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         }
                     }
                 }
+                "JobOrder" -> {
+                    packageManager.getLaunchIntentForPackage("com.example.it_job_order_form")?.apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        putExtra("phorjp", phorjp)
+                    }
+                }
                 else -> null
             }
 
@@ -574,10 +584,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         isRinging = true
         sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
 
-        // Acquire wake lock for ringing
         refreshWakeLock()
 
-        // AUTO-OPEN APP HERE
         openAppAutomatically(notificationType)
 
         ringtoneJob?.cancel()
@@ -710,6 +718,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     }
                 }
             }
+            "JobOrder" -> packageManager.getLaunchIntentForPackage("com.example.it_job_order_form")?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("phorjp", phorjp)
+            }
             else -> {
                 Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -725,13 +737,18 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         val (title, statusText, toggleText) = if (isJapanese) {
             when (notificationType) {
+                "PAGING" -> Triple(
+                    "注意：呼び出されています！",
+                    "🔊 鳴っています - タップして表示",
+                    if (isMonitoring) "監視を停止" else "監視を開始"
+                )
                 "NG" -> Triple(
                     "NGレポート",
                     "🔊 鳴っています - タップして表示",
                     if (isMonitoring) "監視を停止" else "監視を開始"
                 )
-                "PAGING" -> Triple(
-                    "注意：呼び出されています！",
+                "JobOrder" -> Triple(
+                    "ジョブオーダー通知",
                     "🔊 鳴っています - タップして表示",
                     if (isMonitoring) "監視を停止" else "監視を開始"
                 )
@@ -747,13 +764,18 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             }
         } else {
             when (notificationType) {
+                "PAGING" -> Triple(
+                    "Attention: You're being paged!",
+                    "🔊 RINGING - Tap to view",
+                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+                )
                 "NG" -> Triple(
                     "NG Report",
                     "🔊 RINGING - Tap to view",
                     if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
                 )
-                "PAGING" -> Triple(
-                    "Attention: You're being paged!",
+                "JobOrder" -> Triple(
+                    "Job Order Notification",
                     "🔊 RINGING - Tap to view",
                     if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
                 )

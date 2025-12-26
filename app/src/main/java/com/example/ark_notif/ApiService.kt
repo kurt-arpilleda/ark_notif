@@ -36,6 +36,9 @@ interface ApiService {
         @Field("pagingId") pagingId: Int,
         @Field("idNumber") idNumber: String,
         @Field("notifReply") notifReply: Int,
-        @Field("userIndex") userIndex: Int // Add this parameter
+        @Field("userIndex") userIndex: Int
     ): Call<BasicResponse>
+
+    @GET("V4/Others/Kurt/RingAPI/kurt_fetchJobOrder.php")
+    fun getJobOrderStatus(@Query("deviceId") deviceId: String): Call<NotificationStatusResponse>
 }

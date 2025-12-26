@@ -53,6 +53,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private lateinit var alarmManager: AlarmManager
     private var alarmPendingIntent: PendingIntent? = null
     private var heartbeatPendingIntent: PendingIntent? = null
+    private var currentNotificationType: String? = null
 
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
@@ -531,20 +532,16 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                             else -> null
                         }
 
-                        if (notificationType != null) {
-                            sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
-                        } else {
-                            sharedPreferences.edit().remove("current_notification_type").apply()
-                        }
-
-                        withContext(Dispatchers.Main) {
-                            updateNotification()
-                        }
-
-                        if (shouldRing && !isRinging) {
-                            Log.d("RingMonitoringService", "Starting ring")
-                            startRinging(notificationType)
-                        } else if (!shouldRing && isRinging) {
+                        if (shouldRing) {
+                            if (!isRinging) {
+                                Log.d("RingMonitoringService", "Starting ring")
+                                startRinging(notificationType)
+                            } else if (currentNotificationType != notificationType) {
+                                Log.d("RingMonitoringService", "Notification type changed from $currentNotificationType to $notificationType, restarting ring")
+                                stopRinging()
+                                startRinging(notificationType)
+                            }
+                        } else if (isRinging) {
                             Log.d("RingMonitoringService", "Stopping ring")
                             stopRinging()
                         }
@@ -622,9 +619,14 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
         if (notifButtonValue == 0) return
 
-        if (isRinging) return
+        if (isRinging && currentNotificationType == notificationType) return
+
+        if (isRinging && currentNotificationType != notificationType) {
+            stopRinging()
+        }
 
         isRinging = true
+        currentNotificationType = notificationType
         sharedPreferences.edit().putString("current_notification_type", notificationType).apply()
 
         refreshWakeLock()
@@ -704,6 +706,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         if (!isRinging) return
 
         isRinging = false
+        currentNotificationType = null
         sharedPreferences.edit().remove("current_notification_type").apply()
         ringtoneJob?.cancel()
         releaseWakeLock()

@@ -69,6 +69,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         const val ACTION_RESTART_SERVICE = "RESTART_SERVICE"
         const val ACTION_ALARM_TRIGGER = "ALARM_TRIGGER"
         const val ACTION_HEARTBEAT = "HEARTBEAT"
+        private const val NOTIF_BUTTON_PREF = "notifButton"
 
         fun startService(context: Context) {
             val intent = Intent(context, RingMonitoringService::class.java).apply {
@@ -137,9 +138,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             setReferenceCounted(false)
         }
 
-        startPeriodicRestart()
-        startHeartbeat()
-        registerAlarmReceiver()
+        val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
+        if (notifButtonValue == 1) {
+            startPeriodicRestart()
+            startHeartbeat()
+            registerAlarmReceiver()
+        }
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
@@ -317,7 +321,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             when (action) {
                 ACTION_START_MONITORING -> {
                     Log.d("RingMonitoringService", "Received start command")
-                    if (!isMonitoring) {
+                    val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
+                    if (notifButtonValue == 1 && !isMonitoring) {
                         startMonitoring()
                         scheduleNextAlarm()
                         scheduleNextHeartbeat()
@@ -340,36 +345,46 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         stopHeartbeat()
                         cancelAlarms()
                         releaseWakeLock()
+                        sharedPreferences.edit().putInt(NOTIF_BUTTON_PREF, 0).apply()
                     } else {
                         startMonitoring()
                         startPeriodicRestart()
                         startHeartbeat()
                         scheduleNextAlarm()
                         scheduleNextHeartbeat()
+                        sharedPreferences.edit().putInt(NOTIF_BUTTON_PREF, 1).apply()
                     }
                     updateNotification()
                 }
                 ACTION_RESTART_SERVICE -> {
                     Log.d("RingMonitoringService", "Received restart command")
+                    val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
                     stopMonitoring()
-                    startMonitoring()
+                    if (notifButtonValue == 1) {
+                        startMonitoring()
+                    }
                     updateNotification()
                 }
                 ACTION_ALARM_TRIGGER -> {
                     Log.d("RingMonitoringService", "Received alarm trigger")
-                    if (!isMonitoring) {
+                    val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
+                    if (notifButtonValue == 1 && !isMonitoring) {
                         startMonitoring()
                     }
                     scheduleNextAlarm()
                 }
                 ACTION_HEARTBEAT -> {
                     Log.d("RingMonitoringService", "Received heartbeat")
-                    handleHeartbeat()
+                    val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
+                    if (notifButtonValue == 1) {
+                        handleHeartbeat()
+                    }
                     scheduleNextHeartbeat()
                 }
             }
         } ?: run {
-            if (!isMonitoring) {
+            val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
+            if (notifButtonValue == 1 && !isMonitoring) {
                 startMonitoring()
                 scheduleNextAlarm()
                 scheduleNextHeartbeat()
@@ -382,6 +397,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         heartbeatJob?.cancel()
         heartbeatJob = null
     }
+
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
             "phorjp" -> {
@@ -396,10 +412,31 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 Log.d("RingMonitoringService", "Language preference changed, updating notification")
                 updateNotification()
             }
+            NOTIF_BUTTON_PREF -> {
+                Log.d("RingMonitoringService", "Notif button preference changed")
+                val notifButtonValue = sharedPreferences?.getInt(NOTIF_BUTTON_PREF, 1) ?: 1
+                if (notifButtonValue == 1 && !isMonitoring) {
+                    startMonitoring()
+                    startPeriodicRestart()
+                    startHeartbeat()
+                    scheduleNextAlarm()
+                    scheduleNextHeartbeat()
+                } else if (notifButtonValue == 0 && isMonitoring) {
+                    stopMonitoring()
+                    stopPeriodicRestart()
+                    stopHeartbeat()
+                    cancelAlarms()
+                    releaseWakeLock()
+                }
+                updateNotification()
+            }
         }
     }
 
     private fun startPeriodicRestart() {
+        val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
+        if (notifButtonValue == 0) return
+
         if (periodicRestartJob?.isActive == true) return
 
         periodicRestartJob = serviceScope.launch {
@@ -431,6 +468,9 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     }
 
     private fun startMonitoring() {
+        val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
+        if (notifButtonValue == 0) return
+
         if (isMonitoring) return
 
         isMonitoring = true
@@ -579,6 +619,9 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     }
 
     private fun startRinging(notificationType: String?) {
+        val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
+        if (notifButtonValue == 0) return
+
         if (isRinging) return
 
         isRinging = true
@@ -691,6 +734,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         }
 
         val notificationType = sharedPreferences.getString("current_notification_type", null)
+        val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
 
         val toggleIntent = Intent(this, RingMonitoringService::class.java).apply {
             action = ACTION_TOGGLE_MONITORING
@@ -740,26 +784,26 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 "PAGING" -> Triple(
                     "注意：呼び出されています！",
                     "🔊 鳴っています - タップして表示",
-                    if (isMonitoring) "監視を停止" else "監視を開始"
+                    if (notifButtonValue == 1) "監視を停止" else "監視を開始"
                 )
                 "NG" -> Triple(
                     "NGレポート",
                     "🔊 鳴っています - タップして表示",
-                    if (isMonitoring) "監視を停止" else "監視を開始"
+                    if (notifButtonValue == 1) "監視を停止" else "監視を開始"
                 )
                 "JobOrder" -> Triple(
                     "ジョブオーダー通知",
                     "🔊 鳴っています - タップして表示",
-                    if (isMonitoring) "監視を停止" else "監視を開始"
+                    if (notifButtonValue == 1) "監視を停止" else "監視を開始"
                 )
                 else -> Triple(
                     "リング監視サービス",
                     when {
                         isRinging -> "🔊 鳴っています - タップして表示"
-                        isMonitoring -> "📡 アクティブ - モニタリング"
+                        notifButtonValue == 1 -> "📡 アクティブ - モニタリング"
                         else -> "⏸️ 非アクティブ - タップして開始"
                     },
-                    if (isMonitoring) "監視を停止" else "監視を開始"
+                    if (notifButtonValue == 1) "監視を停止" else "監視を開始"
                 )
             }
         } else {
@@ -767,26 +811,26 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 "PAGING" -> Triple(
                     "Attention: You're being paged!",
                     "🔊 RINGING - Tap to view",
-                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+                    if (notifButtonValue == 1) "Stop Monitoring" else "Start Monitoring"
                 )
                 "NG" -> Triple(
                     "NG Report",
                     "🔊 RINGING - Tap to view",
-                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+                    if (notifButtonValue == 1) "Stop Monitoring" else "Start Monitoring"
                 )
                 "JobOrder" -> Triple(
                     "Job Order Notification",
                     "🔊 RINGING - Tap to view",
-                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+                    if (notifButtonValue == 1) "Stop Monitoring" else "Start Monitoring"
                 )
                 else -> Triple(
                     "Ring Monitoring Service",
                     when {
                         isRinging -> "🔊 RINGING - Tap to view"
-                        isMonitoring -> "📡 Active - Monitoring"
+                        notifButtonValue == 1 -> "📡 Active - Monitoring"
                         else -> "⏸️ Inactive - Tap to start"
                     },
-                    if (isMonitoring) "Stop Monitoring" else "Start Monitoring"
+                    if (notifButtonValue == 1) "Stop Monitoring" else "Start Monitoring"
                 )
             }
         }
@@ -808,7 +852,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             .setContentIntent(contentPendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addAction(
-                if (isMonitoring) R.drawable.stop_icon else R.drawable.start_icon,
+                if (notifButtonValue == 1) R.drawable.stop_icon else R.drawable.start_icon,
                 toggleText,
                 togglePendingIntent
             )
@@ -819,6 +863,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     }
 
     private fun updateNotification() {
+        val notifButtonValue = sharedPreferences.getInt(NOTIF_BUTTON_PREF, 1)
         if (monitoringJob?.isActive == true && !isMonitoring) {
             isMonitoring = true
         } else if (monitoringJob?.isActive != true && isMonitoring) {

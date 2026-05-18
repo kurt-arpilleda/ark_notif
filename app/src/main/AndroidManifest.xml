@@ -31,6 +31,7 @@
 
     <queries>
         <package android:name="com.example.ng_notification" />
+        <package android:name="com.example.it_job_order_form" />
     </queries>
 
     <application

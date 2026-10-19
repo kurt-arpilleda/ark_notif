@@ -32,6 +32,7 @@
     <queries>
         <package android:name="com.example.ng_notification" />
         <package android:name="com.example.it_job_order_form" />
+        <package android:name="com.example.guard_obscreen_app" />
     </queries>
 
     <application

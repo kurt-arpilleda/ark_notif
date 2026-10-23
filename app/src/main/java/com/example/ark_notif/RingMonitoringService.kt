@@ -54,6 +54,8 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
     private var alarmPendingIntent: PendingIntent? = null
     private var heartbeatPendingIntent: PendingIntent? = null
     private var currentNotificationType: String? = null
+    private var guardObCycleStart: Long = 0L
+    private var guardObLastSeen: Long = 0L
 
     companion object {
         private const val CHANNEL_ID = "RingMonitoringChannel"
@@ -72,6 +74,9 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         const val ACTION_ALARM_TRIGGER = "ALARM_TRIGGER"
         const val ACTION_HEARTBEAT = "HEARTBEAT"
         private const val NOTIF_BUTTON_PREF = "notifButton"
+        private const val GUARD_OB_RING_DURATION = 180_000L
+        private const val GUARD_OB_PAUSE_DURATION = 180_000L
+        private const val GUARD_OB_STALE_THRESHOLD = 60_000L
 
         fun startService(context: Context) {
             val intent = Intent(context, RingMonitoringService::class.java).apply {
@@ -553,9 +558,15 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                                 stopRinging()
                                 startRinging(notificationType)
                             }
-                        } else if (isRinging) {
-                            Log.d("RingMonitoringService", "Stopping ring")
-                            stopRinging()
+                            if (notificationType == "GuardOB") {
+                                guardObLastSeen = System.currentTimeMillis()
+                            }
+                        } else {
+                            guardObCycleStart = 0L
+                            if (isRinging) {
+                                Log.d("RingMonitoringService", "Stopping ring")
+                                stopRinging()
+                            }
                         }
                     } catch (e: Exception) {
                         if (isActive) {
@@ -651,16 +662,25 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
 
         openAppAutomatically(notificationType)
 
+        val isGuardOb = notificationType == "GuardOB"
+        val cycleLength = GUARD_OB_RING_DURATION + GUARD_OB_PAUSE_DURATION
+
+        if (isGuardOb) {
+            val now = System.currentTimeMillis()
+            if (guardObCycleStart == 0L || now - guardObLastSeen > GUARD_OB_STALE_THRESHOLD) {
+                guardObCycleStart = now
+            }
+            guardObLastSeen = now
+        } else {
+            guardObCycleStart = 0L
+        }
+
         ringtoneJob?.cancel()
 
         ringtoneJob = serviceScope.launch {
             try {
-                val pattern = longArrayOf(0, 1000, 1000)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator?.vibrate(pattern, 0)
+                if (!isGuardOb) {
+                    startVibration()
                 }
 
                 val ringtoneUri = try {
@@ -686,16 +706,49 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     }
                 }
 
-                while (isActive && isRinging) {
-                    try {
-                        if (currentRingtone?.isPlaying != true) {
-                            currentRingtone?.play()
+                if (isGuardOb) {
+                    while (isActive && isRinging) {
+                        val position = (System.currentTimeMillis() - guardObCycleStart) % cycleLength
+                        if (position < GUARD_OB_RING_DURATION) {
+                            Log.d("RingMonitoringService", "Guard OB ring phase started")
+                            startVibration()
+                            val phaseEnd = System.currentTimeMillis() + (GUARD_OB_RING_DURATION - position)
+                            while (isActive && isRinging && System.currentTimeMillis() < phaseEnd) {
+                                try {
+                                    if (currentRingtone?.isPlaying != true) {
+                                        currentRingtone?.play()
+                                    }
+                                    delay(500)
+                                } catch (e: Exception) {
+                                    if (e !is CancellationException) {
+                                        Log.e("RingMonitoringService", "Error maintaining ringtone", e)
+                                        delay(1000)
+                                    } else {
+                                        throw e
+                                    }
+                                }
+                            }
+                            currentRingtone?.stop()
+                            vibrator?.cancel()
+                        } else {
+                            Log.d("RingMonitoringService", "Guard OB pause phase started")
+                            currentRingtone?.stop()
+                            vibrator?.cancel()
+                            delay(cycleLength - position)
                         }
-                        delay(500)
-                    } catch (e: Exception) {
-                        if (e !is CancellationException) {
-                            Log.e("RingMonitoringService", "Error maintaining ringtone", e)
-                            delay(1000)
+                    }
+                } else {
+                    while (isActive && isRinging) {
+                        try {
+                            if (currentRingtone?.isPlaying != true) {
+                                currentRingtone?.play()
+                            }
+                            delay(500)
+                        } catch (e: Exception) {
+                            if (e !is CancellationException) {
+                                Log.e("RingMonitoringService", "Error maintaining ringtone", e)
+                                delay(1000)
+                            }
                         }
                     }
                 }
@@ -718,6 +771,16 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         }
 
         updateNotification()
+    }
+
+    private fun startVibration() {
+        val pattern = longArrayOf(0, 1000, 1000)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator?.vibrate(pattern, 0)
+        }
     }
 
     private fun stopRinging() {

@@ -67,6 +67,7 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
         private const val ALARM_REQUEST_CODE = 9876
         private const val HEARTBEAT_REQUEST_CODE = 9877
         private const val GUARD_OB_PACKAGE = "com.example.guard_obscreen_app"
+        private const val MAINT_ALERT_PACKAGE = "com.example.maintalert"
         const val ACTION_START_MONITORING = "START_MONITORING"
         const val ACTION_STOP_MONITORING = "STOP_MONITORING"
         const val ACTION_TOGGLE_MONITORING = "TOGGLE_MONITORING"
@@ -527,6 +528,14 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                             }
                         }
 
+                        val maintAlertResponse = withContext(Dispatchers.IO) {
+                            if (phorjp == "jp") {
+                                RetrofitClientJP.instance.getMaintenanceAlertStatus(deviceId).execute()
+                            } else {
+                                RetrofitClient.instance.getMaintenanceAlertStatus(deviceId).execute()
+                            }
+                        }
+
                         if (shouldAcquireWakeLock) {
                             releaseWakeLock()
                         }
@@ -535,17 +544,20 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         val pagingStatus = pagingResponse.body()
                         val jobOrderStatus = jobOrderResponse.body()
                         val guardObStatus = guardObResponse.body()
+                        val maintAlertStatus = maintAlertResponse.body()
 
                         val shouldRing = (pagingStatus?.shouldRing == true) ||
                                 (ringStatus?.shouldRing == true) ||
                                 (jobOrderStatus?.shouldRing == true) ||
-                                (guardObStatus?.shouldRing == true)
+                                (guardObStatus?.shouldRing == true) ||
+                                (maintAlertStatus?.shouldRing == true)
 
                         val notificationType = when {
                             pagingStatus?.shouldRing == true -> pagingStatus.type
                             ringStatus?.shouldRing == true -> ringStatus.type
                             jobOrderStatus?.shouldRing == true -> jobOrderStatus.type
                             guardObStatus?.shouldRing == true -> guardObStatus.type
+                            maintAlertStatus?.shouldRing == true -> maintAlertStatus.type
                             else -> null
                         }
 
@@ -628,6 +640,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 }
                 "GuardOB" -> {
                     packageManager.getLaunchIntentForPackage(GUARD_OB_PACKAGE)?.apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        putExtra("phorjp", phorjp)
+                    }
+                }
+                "MaintAlert" -> {
+                    packageManager.getLaunchIntentForPackage(MAINT_ALERT_PACKAGE)?.apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         putExtra("phorjp", phorjp)
                     }
@@ -856,6 +874,12 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             } ?: Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             })
+            "MaintAlert" -> (packageManager.getLaunchIntentForPackage(MAINT_ALERT_PACKAGE)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("phorjp", phorjp)
+            } ?: Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            })
             else -> {
                 Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -891,6 +915,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     "🔊 鳴っています - タップしてゲート画面を開く",
                     if (notifButtonValue == 1) "監視を停止" else "監視を開始"
                 )
+                "MaintAlert" -> Triple(
+                    "メンテナンスアラート：対応が必要です！",
+                    "🔊 鳴っています - タップして表示",
+                    if (notifButtonValue == 1) "監視を停止" else "監視を開始"
+                )
                 else -> Triple(
                     "リング監視サービス",
                     when {
@@ -921,6 +950,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 "GuardOB" -> Triple(
                     "Guard OB Alert: Action needed!",
                     "🔊 RINGING - Tap to open Guard Gate screen",
+                    if (notifButtonValue == 1) "Stop Monitoring" else "Start Monitoring"
+                )
+                "MaintAlert" -> Triple(
+                    "Maintenance Alert: Action needed!",
+                    "🔊 RINGING - Tap to view",
                     if (notifButtonValue == 1) "Stop Monitoring" else "Start Monitoring"
                 )
                 else -> Triple(

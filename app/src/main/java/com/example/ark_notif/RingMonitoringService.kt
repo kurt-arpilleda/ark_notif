@@ -526,6 +526,13 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                                 RetrofitClient.instance.getGuardObStatus(deviceId).execute()
                             }
                         }
+                        val ngResponse = withContext(Dispatchers.IO) {
+                            if (phorjp == "jp") {
+                                RetrofitClientJP.instance.getNgStatus(deviceId).execute()
+                            } else {
+                                RetrofitClient.instance.getNgStatus(deviceId).execute()
+                            }
+                        }
 
                         if (shouldAcquireWakeLock) {
                             releaseWakeLock()
@@ -535,17 +542,20 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                         val pagingStatus = pagingResponse.body()
                         val jobOrderStatus = jobOrderResponse.body()
                         val guardObStatus = guardObResponse.body()
+                        val ngStatus = ngResponse.body() 
 
                         val shouldRing = (pagingStatus?.shouldRing == true) ||
                                 (ringStatus?.shouldRing == true) ||
                                 (jobOrderStatus?.shouldRing == true) ||
-                                (guardObStatus?.shouldRing == true)
+                                (guardObStatus?.shouldRing == true) || 
+                                (ngStatus?.shouldRing == true)
 
                         val notificationType = when {
                             pagingStatus?.shouldRing == true -> pagingStatus.type
                             ringStatus?.shouldRing == true -> ringStatus.type
                             jobOrderStatus?.shouldRing == true -> jobOrderStatus.type
                             guardObStatus?.shouldRing == true -> guardObStatus.type
+                            ngStatus?.shouldRing == true -> ngStatus.type
                             else -> null
                         }
 

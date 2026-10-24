@@ -44,4 +44,7 @@ interface ApiService {
 
     @GET("V4/Others/Kurt/RingAPI/kurt_fetchGuardOB.php")
     fun getGuardObStatus(@Query("deviceId") deviceId: String): Call<NotificationStatusResponse>
+
+    @GET("V4/Others/Nielle/Maintenance CheckSheet Notification/nielle_fetchNg.php")
+    fun getNgStatus(@Query("deviceId") deviceId: String): Call<NotificationStatusResponse>
 }

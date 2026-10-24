@@ -866,6 +866,10 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra("phorjp", phorjp)
             }
+            "MaintenanceAlert" -> packageManager.getLaunchIntentForPackage("com.example.maintalert")?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("phorjp", phorjp)
+            }
             "GuardOB" -> (packageManager.getLaunchIntentForPackage(GUARD_OB_PACKAGE)?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra("phorjp", phorjp)
@@ -897,6 +901,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
                     "🔊 鳴っています - タップして表示",
                     if (notifButtonValue == 1) "監視を停止" else "監視を開始"
                 )
+                "MaintenanceAlert" -> Triple(
+                    "Machine NGレポート",
+                    "🔊 鳴っています - タップして表示",
+                    if (notifButtonValue == 1) "監視を停止" else "監視を開始"
+                )
                 "JobOrder" -> Triple(
                     "ジョブオーダー通知",
                     "🔊 鳴っています - タップして表示",
@@ -921,6 +930,11 @@ class RingMonitoringService : Service(), SharedPreferences.OnSharedPreferenceCha
             when (notificationType) {
                 "PAGING" -> Triple(
                     "Attention: You're being paged!",
+                    "🔊 RINGING - Tap to view",
+                    if (notifButtonValue == 1) "Stop Monitoring" else "Start Monitoring"
+                )
+                "MaintenanceAlert" -> Triple(
+                    "Machine NG Report",
                     "🔊 RINGING - Tap to view",
                     if (notifButtonValue == 1) "Stop Monitoring" else "Start Monitoring"
                 )
